@@ -42,27 +42,25 @@ const GameImage: React.FC<{ src: string; alt: string; appId: number }> = ({ src,
   const handleError = () => {
     if (attempt === 0) {
       setAttempt(1);
+      // Fallback 1: Wide capsule 616x353 (exact same aspect ratio)
       setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
     } else if (attempt === 1) {
       setAttempt(2);
+      // Fallback 2: Akamai CDN header
       setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
     } else if (attempt === 2) {
       setAttempt(3);
-      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`);
-    } else if (attempt === 3) {
-      setAttempt(4);
-      setCurrentSrc(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_sm_120.jpg`);
-    } else if (attempt === 4) {
-      setAttempt(5);
-      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`);
+      // Fallback 3: Cloudflare CDN header
+      setCurrentSrc(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`);
     } else {
+      // Direct placeholder - NEVER use portrait 600x900 or tiny 120x45!
       setHasError(true);
     }
   };
 
   if (hasError) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-2 text-center border border-steam-border/60">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/95 p-2 text-center border border-steam-border/60">
         <Gamepad2 className="w-8 h-8 text-steam-accent/60 mb-1" />
         <span className="text-[11px] font-semibold text-slate-300 line-clamp-2">{alt}</span>
       </div>
@@ -70,23 +68,13 @@ const GameImage: React.FC<{ src: string; alt: string; appId: number }> = ({ src,
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-slate-950">
-      {/* Blurred background glow so banner edges are pleasant without cutting off foreground */}
-      <img
-        src={currentSrc}
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 w-full h-full object-cover blur-md opacity-35 scale-110 pointer-events-none select-none"
-      />
-      {/* Crisp centered main image with NO cropping */}
-      <img
-        src={currentSrc}
-        alt={alt}
-        onError={handleError}
-        className="relative z-10 w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-300"
-        loading="lazy"
-      />
-    </div>
+    <img
+      src={currentSrc}
+      alt={alt}
+      onError={handleError}
+      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+      loading="lazy"
+    />
   );
 };
 
@@ -582,7 +570,7 @@ export const Discover: React.FC = () => {
               >
                 <div>
                   {/* Clean Capsule Cover */}
-                  <div className="relative aspect-[231/87] w-full bg-slate-950 overflow-hidden">
+                  <div className="relative aspect-[460/215] w-full bg-slate-950 overflow-hidden">
                     <GameImage src={game.headerImage} alt={game.name} appId={game.id} />
 
                     {/* Discount badge */}

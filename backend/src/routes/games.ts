@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import axios from 'axios';
 import { gameCacheQueries } from '../db/index.js';
-import { getOrCacheGameImage, getOrCacheProxyImage, ImageType } from '../services/imageCache.js';
+import { ImageType } from '../services/imageCache.js';
 
 interface L1CacheEntry<T> {
   data: T;
@@ -75,6 +75,20 @@ const JUNK_AND_ADULT_KEYWORDS = [
   'steam deck', 'steam frame', 'valve index', 'controller', 'docking station', 'face cushion', 'carrying case',
   'soundtrack', 'original soundtrack', 'ost',
 ];
+
+export function getDirectSteamHeaderUrl(appId: number, rawImg?: string | null): string {
+  if (rawImg && rawImg.startsWith('http')) {
+    // If rawImg is a low-res capsule_sm_120.jpg or capsule_231x87.jpg, upgrade to full header.jpg
+    if (rawImg.includes('capsule_sm_120.jpg') || rawImg.includes('capsule_231x87.jpg')) {
+      return rawImg.replace(/capsule_sm_120\.jpg|capsule_231x87\.jpg/, 'header.jpg');
+    }
+    // Avoid vertical portrait artwork (library_600x900)
+    if (!rawImg.includes('library_600x900') && !rawImg.includes('portrait')) {
+      return rawImg;
+    }
+  }
+  return `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+}
 
 function isCleanGame(name: string): boolean {
   if (!name) return false;
@@ -203,7 +217,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
 
         const imgMatch = b.match(/<img[^>]+src="([^"]+)"/);
         const rawImg = imgMatch ? imgMatch[1].trim() : '';
-        const headerImage = `/api/games/image/${id}/header`;
+        const headerImage = getDirectSteamHeaderUrl(id, rawImg);
 
         const priceMatch = b.match(/class="[^"]*discount_final_price[^"]*"[^>]*>([^<]+)<\/div>/);
         const origMatch = b.match(/class="[^"]*discount_original_price[^"]*"[^>]*>([^<]+)<\/div>/);
@@ -223,8 +237,8 @@ export async function gamesRoutes(fastify: FastifyInstance) {
         const discountPercent = discountMatch ? parseInt(discountMatch[1], 10) : 0;
         const releaseDate = releaseMatch ? releaseMatch[1].trim() : '';
 
-        if (id && rawImg && rawImg.startsWith('http')) {
-          gameCacheQueries.upsertImages(id, name, rawImg, null, null);
+        if (id && headerImage) {
+          gameCacheQueries.upsertImages(id, name, headerImage, null, null);
         }
 
         items.push({
@@ -250,12 +264,13 @@ export async function gamesRoutes(fastify: FastifyInstance) {
           if (items.length >= countNum) break;
           if (!isCleanGame(it.name)) continue;
 
+          const itHeader = getDirectSteamHeaderUrl(it.id, it.header_image || it.large_capsule_image);
           items.push({
             id: it.id,
             name: it.name,
             discountPercent: it.discount_percent || 0,
             priceText: it.final_price ? `${it.final_price / 100} KZT` : (it.is_free ? 'Бесплатно' : 'В магазине Steam'),
-            headerImage: `/api/games/image/${it.id}/header`,
+            headerImage: itHeader,
             isFree: Boolean(it.is_free),
           });
         }
@@ -332,7 +347,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
       const formatItem = (item: any) => ({
         id: item.id,
         name: item.name,
-        headerImage: `/api/games/image/${item.id}/header`,
+        headerImage: getDirectSteamHeaderUrl(item.id, item.header_image || item.large_capsule_image || item.small_capsule_image),
         discountPercent: item.discount_percent || 0,
         originalPrice: item.original_price ? item.original_price / 100 : null,
         finalPrice: item.final_price ? item.final_price / 100 : (item.is_free ? 0 : null),
@@ -423,7 +438,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
             }
           : null,
         tinyImage: item.tiny_image,
-        headerImage: `/api/games/image/${item.id}/header`,
+        headerImage: getDirectSteamHeaderUrl(item.id, item.tiny_image),
       }));
 
       const result = { items };
@@ -719,7 +734,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
         appId: mainData.steam_appid,
         name: mainData.name,
         shortDescription: mainData.short_description,
-        headerImage: `/api/games/image/${mainData.steam_appid}/header`,
+        headerImage: getDirectSteamHeaderUrl(mainData.steam_appid, mainData.header_image),
         website: mainData.website,
         developers: mainData.developers || [],
         publishers: mainData.publishers || [],
@@ -740,7 +755,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
       gameCacheQueries.set(
         numAppId,
         mainData.name,
-        mainData.header_image,
+        result.headerImage,
         null,
         null,
         JSON.stringify(result),
@@ -758,8 +773,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Local disk & CDN image caching endpoint for games
-  // Supported types: 'header', 'capsule', 'hero'
+  // Direct CDN redirect endpoint for game banners (no disk writes, only original links)
   fastify.get('/image/:appId/:type', async (request, reply) => {
     const { appId, type = 'header' } = request.params as { appId: string; type?: string };
     const numId = parseInt(appId, 10);
@@ -767,41 +781,24 @@ export async function gamesRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid app ID' });
     }
 
-    const validTypes: ImageType[] = ['header', 'capsule', 'hero'];
-    const imgType = validTypes.includes(type as ImageType) ? (type as ImageType) : 'header';
-
-    const result = await getOrCacheGameImage(numId, imgType);
-    if (!result) {
-      return reply.status(404).send({ error: 'Game image not found' });
+    const cached = gameCacheQueries.get(numId);
+    let targetUrl = type === 'capsule' ? cached?.capsule_image : cached?.header_image;
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      targetUrl = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${numId}/header.jpg`;
     }
 
-    reply.header('Content-Type', result.contentType);
-    reply.header('Cache-Control', 'public, max-age=2592000, immutable'); // 30 days
-    reply.header('X-Cache', result.hit ? 'HIT-DISK' : 'MISS-FETCHED');
-    if (result.contentLength) {
-      reply.header('Content-Length', result.contentLength);
-    }
-    return reply.send(result.stream);
+    reply.header('Cache-Control', 'public, max-age=604800');
+    return reply.redirect(targetUrl, 302);
   });
 
-  // Proxy external image (screenshots, avatars, etc.) with local on-disk caching
+  // External image redirect endpoint (no disk storage)
   fastify.get('/proxy-image', async (request, reply) => {
     const { url } = request.query as { url?: string };
     if (!url) {
       return reply.status(400).send({ error: 'Missing image url parameter' });
     }
 
-    const result = await getOrCacheProxyImage(url);
-    if (!result) {
-      return reply.status(404).send({ error: 'Image proxy failed' });
-    }
-
-    reply.header('Content-Type', result.contentType);
-    reply.header('Cache-Control', 'public, max-age=2592000, immutable');
-    reply.header('X-Cache', result.hit ? 'HIT-DISK' : 'MISS-FETCHED');
-    if (result.contentLength) {
-      reply.header('Content-Length', result.contentLength);
-    }
-    return reply.send(result.stream);
+    reply.header('Cache-Control', 'public, max-age=604800');
+    return reply.redirect(url, 302);
   });
 }

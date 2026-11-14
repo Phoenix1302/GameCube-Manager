@@ -235,7 +235,7 @@ export const GameModal: React.FC<GameModalProps> = ({
                 src={details.headerImage}
                 alt={details.name}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = `/api/games/image/${details.appId}/header`;
+                  (e.target as HTMLImageElement).src = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${details.appId}/capsule_616x353.jpg`;
                 }}
                 className="w-full h-full object-cover"
               />

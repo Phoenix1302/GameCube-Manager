@@ -31,32 +31,20 @@ export function getSteamCdnUrls(appId: number, type: ImageType): string[] {
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-        `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
-        `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
-        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_231x87.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_sm_120.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
       ];
     case 'capsule':
       return [
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
-        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_231x87.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_sm_120.jpg`,
       ];
     case 'hero':
       return [
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
       ];
     default:
       return [
