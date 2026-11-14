@@ -23,7 +23,7 @@ echo " ██║  ███╗███████║██╔████╔�
 echo " ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  "
 echo " ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗╚██████╗╚██████╔╝██████╔╝███████╗"
 echo "  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝"
-echo -e "                   Steam Machine Control Center v1.0.0${NC}\n"
+echo -e "                   Steam Machine Control Center v1.0.1${NC}\n"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_USER="$(whoami)"
@@ -113,8 +113,8 @@ echo -e "    ${GREEN}✔${NC} Enabled systemd lingering for user ${CURRENT_USER}
 echo -e "\n${BLUE}==>${NC} ${BOLD}5. Building container images...${NC}"
 cd "$SCRIPT_DIR"
 
-echo -e "    - Building ${BOLD}gamecube-manager:1.0.0${NC} (Frontend + Backend)..."
-podman build -t localhost/gamecube-manager:1.0.0 .
+echo -e "    - Building ${BOLD}gamecube-manager:1.0.1${NC} (Frontend + Backend)..."
+podman build -t localhost/gamecube-manager:1.0.1 .
 
 echo -e "    - Building ${BOLD}gamecube-torrent:1.0.0${NC} (Headless qBittorrent)..."
 podman build -t localhost/gamecube-torrent:1.0.0 deploy/qbittorrent
@@ -157,7 +157,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-web
 Pod=gamecube.pod
-Image=localhost/gamecube-manager:1.0.0
+Image=localhost/gamecube-manager:1.0.1
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
 Environment=PORT=3000

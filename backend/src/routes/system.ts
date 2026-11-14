@@ -86,6 +86,140 @@ function getNetworkStats(): Array<{
   return [];
 }
 
+function getRealOsInfo(fallback: { platform: string; distro: string; release: string; hostname: string }) {
+  let distro = '';
+  let release = '';
+  let hostname = '';
+
+  const osReleasePaths = [
+    '/host_root/etc/os-release',
+    '/host_root/usr/lib/os-release',
+    '/etc/os-release',
+  ];
+
+  for (const p of osReleasePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const content = fs.readFileSync(p, 'utf-8');
+        const lines = content.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('PRETTY_NAME=')) {
+            distro = line.replace(/^PRETTY_NAME=["']?/, '').replace(/["']?$/, '').trim();
+          } else if (!distro && line.startsWith('NAME=')) {
+            distro = line.replace(/^NAME=["']?/, '').replace(/["']?$/, '').trim();
+          } else if (line.startsWith('VERSION_ID=')) {
+            release = line.replace(/^VERSION_ID=["']?/, '').replace(/["']?$/, '').trim();
+          }
+        }
+        if (distro) break;
+      } catch {}
+    }
+  }
+
+  const hostnamePaths = ['/host_root/etc/hostname', '/etc/hostname'];
+  for (const p of hostnamePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        hostname = fs.readFileSync(p, 'utf-8').trim();
+        if (hostname) break;
+      } catch {}
+    }
+  }
+
+  return {
+    platform: fallback.platform || process.platform,
+    distro: distro || fallback.distro || 'Linux',
+    release: release || fallback.release || '',
+    hostname: hostname || fallback.hostname || 'gamecube',
+  };
+}
+
+function getRealDisks(fsList: Array<{ fs: string; type: string; size: number; used: number; available: number; use: number; mount: string }>) {
+  const ignoredTypes = new Set([
+    'overlay',
+    'efivarfs',
+    'tmpfs',
+    'devtmpfs',
+    'squashfs',
+    'tracefs',
+    'cgroup',
+    'cgroup2',
+    'proc',
+    'sysfs',
+    'ramfs',
+    'devpts',
+    'mqueue',
+    'hugetlbfs',
+    'fuse',
+    'fuse.gvfsd-fuse',
+    'fuse.portal',
+  ]);
+
+  const seenMounts = new Set<string>();
+  const realDisks: Array<{
+    fs: string;
+    type: string;
+    size: number;
+    used: number;
+    available: number;
+    use: number;
+    mount: string;
+  }> = [];
+
+  for (const item of fsList) {
+    const type = (item.type || '').toLowerCase();
+    const mount = item.mount || '';
+    const fsName = item.fs || '';
+
+    // Ignore virtual / in-memory filesystems
+    if (ignoredTypes.has(type)) continue;
+
+    // Ignore Podman/Docker containers/storage overlays and container internals
+    if (
+      mount.includes('containers/storage') ||
+      mount.includes('overlay') ||
+      mount.includes('.local/share/containers') ||
+      mount.includes('/var/lib/docker') ||
+      mount.includes('/app/backend') ||
+      mount.includes('/etc/hosts') ||
+      mount.includes('/etc/resolv.conf') ||
+      mount.includes('/etc/hostname') ||
+      mount.includes('sys/firmware')
+    ) {
+      continue;
+    }
+
+    // Skip trivial mounts (< 10 MB, like efivars or bootloader stubs)
+    if (item.size < 10 * 1024 * 1024) continue;
+
+    // Normalize mount path: strip /host_root prefix if present
+    let cleanMount = mount;
+    if (cleanMount === '/host_root') {
+      cleanMount = '/';
+    } else if (cleanMount.startsWith('/host_root/')) {
+      cleanMount = cleanMount.replace(/^\/host_root/, '');
+    }
+
+    // Deduplicate mount points
+    if (seenMounts.has(cleanMount)) continue;
+    seenMounts.add(cleanMount);
+
+    realDisks.push({
+      fs: fsName,
+      type: item.type,
+      size: item.size,
+      used: item.used,
+      available: item.available,
+      use: item.use,
+      mount: cleanMount,
+    });
+  }
+
+  // Sort by size descending (largest game/root disks first)
+  realDisks.sort((a, b) => b.size - a.size);
+  return realDisks;
+}
+
 export async function getSystemStatsPayload() {
   const [load, cpu, temp, mem, fsSize, osInfo, time] = await Promise.all([
     si.currentLoad().catch(() => ({ currentLoad: 0, cpus: [] })),
@@ -115,7 +249,7 @@ export async function getSystemStatsPayload() {
 
   const memUsedPercent = Math.round(((mem.total - mem.available) / mem.total) * 100);
 
-  const disks = fsSize.map((fs) => ({
+  const rawDisks = fsSize.map((fs) => ({
     fs: fs.fs,
     type: fs.type,
     size: fs.size,
@@ -124,6 +258,7 @@ export async function getSystemStatsPayload() {
     use: fs.use,
     mount: fs.mount,
   }));
+  const disks = getRealDisks(rawDisks);
 
   let network = getNetworkStats();
   if (network.length === 0) {
@@ -141,12 +276,7 @@ export async function getSystemStatsPayload() {
   return {
     timestamp: Date.now(),
     uptime: time.uptime,
-    os: {
-      platform: osInfo.platform,
-      distro: osInfo.distro,
-      release: osInfo.release,
-      hostname: osInfo.hostname,
-    },
+    os: getRealOsInfo(osInfo),
     cpu: {
       brand: `${cpu.manufacturer} ${cpu.brand}`.trim(),
       cores: cpu.cores,

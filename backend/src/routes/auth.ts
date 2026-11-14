@@ -10,7 +10,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     const initialized = isSystemInitialized();
     return {
       initialized,
-      version: '1.0.0',
+      version: '1.0.1',
       appName: 'GameCube Manager',
     };
   });

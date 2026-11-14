@@ -105,7 +105,7 @@ export const Setup: React.FC = () => {
               GAMECUBE MANAGER
             </h1>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-steam-cyan/20 text-steam-cyan border border-steam-cyan/40">
-              v1.0.0
+              v1.0.1
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">
@@ -164,7 +164,7 @@ export const Setup: React.FC = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="Имя администратора"
                 required
                 minLength={3}
                 className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl pl-10 pr-4 py-3 border border-steam-border focus:outline-none focus:border-steam-blue transition-colors font-mono"

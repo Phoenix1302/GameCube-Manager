@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import axios from 'axios';
 import { settingsQueries } from '../db/index.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { authenticate, getAuthUser } from '../middleware/auth.js';
 import {
   getFullCacheStats,
   cleanImageCache,
@@ -9,21 +9,44 @@ import {
 } from '../services/imageCache.js';
 
 export async function settingsRoutes(fastify: FastifyInstance) {
-  fastify.addHook('preHandler', requireAdmin);
+  fastify.addHook('preHandler', authenticate);
 
-  // Get all settings
-  fastify.get('/', async () => {
-    const settings = settingsQueries.getAll();
-    return { settings };
+  // Get settings (admins receive system settings; regular users receive their own personal settings)
+  fastify.get('/', async (request) => {
+    const user = getAuthUser(request);
+    if (user.role === 'admin') {
+      const settings = settingsQueries.getAll();
+      return { settings };
+    }
+
+    // Regular users: return public & per-user settings
+    const userSettings = settingsQueries.getUserSettings(user.id);
+    return {
+      settings: {
+        rutracker_url: userSettings.rutracker_url || 'https://rutracker.org',
+        rutracker_cookie: userSettings.rutracker_cookie || '',
+        rutracker_download_mode: userSettings.rutracker_download_mode || 'magnet',
+        rutracker_user_agent: userSettings.rutracker_user_agent || '',
+        qbittorrent_url: 'http://127.0.0.1:8085',
+      },
+    };
   });
 
-  // Get full cache statistics (images on disk, SQLite database, limits)
-  fastify.get('/cache-stats', async () => {
+  // Get full cache statistics (images on disk, SQLite database, limits) - Admin only
+  fastify.get('/cache-stats', async (request, reply) => {
+    const user = getAuthUser(request);
+    if (user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Administrative privileges required' });
+    }
     return getFullCacheStats();
   });
 
-  // Clean cache manually on demand
-  fastify.post('/cache-clean', async (request) => {
+  // Clean cache manually on demand - Admin only
+  fastify.post('/cache-clean', async (request, reply) => {
+    const user = getAuthUser(request);
+    if (user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Administrative privileges required' });
+    }
     const { type = 'images' } = (request.body as { type?: 'images' | 'all' }) || {};
     let result;
     if (type === 'all') {
@@ -41,20 +64,41 @@ export async function settingsRoutes(fastify: FastifyInstance) {
 
   // Update settings
   fastify.post('/', async (request) => {
+    const user = getAuthUser(request);
     const body = request.body as Record<string, string>;
+
+    if (user.role === 'admin') {
+      for (const [key, value] of Object.entries(body)) {
+        if (typeof value === 'string') {
+          settingsQueries.set(key, value.trim());
+        }
+      }
+      return {
+        message: 'Settings saved successfully',
+        settings: settingsQueries.getAll(),
+      };
+    }
+
+    // Regular user can only save their own rutracker & download preferences
+    const allowedKeys = ['rutracker_cookie', 'rutracker_download_mode', 'rutracker_url', 'rutracker_user_agent'];
     for (const [key, value] of Object.entries(body)) {
-      if (typeof value === 'string') {
-        settingsQueries.set(key, value.trim());
+      if (allowedKeys.includes(key) && typeof value === 'string') {
+        settingsQueries.setUserSetting(user.id, key, value.trim());
       }
     }
+
     return {
-      message: 'Settings saved successfully',
-      settings: settingsQueries.getAll(),
+      message: 'Личные настройки успешно сохранены',
+      settings: settingsQueries.getUserSettings(user.id),
     };
   });
 
-  // Test qBittorrent connection
+  // Test qBittorrent connection - Admin only
   fastify.post('/test-qbittorrent', async (request, reply) => {
+    const user = getAuthUser(request);
+    if (user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Administrative privileges required' });
+    }
     const { url, username, password } = request.body as {
       url?: string;
       username?: string;

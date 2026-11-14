@@ -7,21 +7,26 @@ import {
   isRutrackerConfigured,
 } from '../services/rutracker.js';
 import { settingsQueries } from '../db/index.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, getAuthUser } from '../middleware/auth.js';
 
 export async function rutrackerRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
   fastify.addHook('preHandler', async (request) => {
+    const user = getAuthUser(request);
     const ua = request.headers['user-agent'];
     if (ua && !ua.includes('node') && !ua.includes('axios')) {
+      if (user?.id) {
+        settingsQueries.setUserSetting(user.id, 'rutracker_user_agent', ua);
+      }
       settingsQueries.set('rutracker_user_agent', ua);
     }
   });
 
-  // Status check: whether RuTracker credentials/cookies are set
-  fastify.get('/status', async () => {
+  // Status check: whether RuTracker credentials/cookies are set for this user
+  fastify.get('/status', async (request) => {
+    const user = getAuthUser(request);
     return {
-      configured: isRutrackerConfigured(),
+      configured: isRutrackerConfigured(user?.id),
     };
   });
 
@@ -34,7 +39,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Search term is required' });
     }
 
-    const result = await searchRutracker(term);
+    const user = getAuthUser(request);
+    const result = await searchRutracker(term, user?.id);
     return result;
   });
 
@@ -47,7 +53,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const magnet = await getRutrackerMagnet(numId);
+      const user = getAuthUser(request);
+      const magnet = await getRutrackerMagnet(numId, undefined, user?.id);
       return { topicId: numId, magnet };
     } catch (err: any) {
       return reply.status(500).send({
@@ -70,7 +77,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const result = await downloadTorrentToQBit(numId, savePath, mode);
+      const user = getAuthUser(request);
+      const result = await downloadTorrentToQBit(numId, savePath, mode, user?.id);
       return result;
     } catch (err: any) {
       return reply.status(500).send({
@@ -81,7 +89,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
 
   // Test RuTracker connection with configured credentials/cookies
   fastify.post('/test', async (request) => {
+    const user = getAuthUser(request);
     const ua = request.headers['user-agent'];
-    return testRutrackerConnection(ua);
+    return testRutrackerConnection(ua, user?.id);
   });
 }

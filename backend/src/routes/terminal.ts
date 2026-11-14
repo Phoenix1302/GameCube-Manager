@@ -18,13 +18,48 @@ async function getNodePty() {
   return nodePty;
 }
 
-function getDefaultShell(): string {
+function getShellExecution(): { file: string; args: string[]; cwd: string; env: Record<string, string> } {
   if (config.isWindows) {
-    return process.env.COMSPEC || 'powershell.exe';
+    return {
+      file: process.env.COMSPEC || 'powershell.exe',
+      args: [],
+      cwd: process.cwd(),
+      env: { ...(process.env as Record<string, string>) },
+    };
   }
-  if (fs.existsSync('/bin/bash')) return '/bin/bash';
-  if (fs.existsSync('/usr/bin/bash')) return '/usr/bin/bash';
-  return '/bin/sh';
+
+  // If running inside container with host root mounted at /host_root:
+  // Use chroot to escape into host system so htop, systemctl, dnf, etc. work natively
+  if (
+    fs.existsSync('/host_root') &&
+    (fs.existsSync('/host_root/bin/bash') || fs.existsSync('/host_root/usr/bin/bash'))
+  ) {
+    return {
+      file: 'chroot',
+      args: ['/host_root', '/bin/bash', '-l'],
+      cwd: '/',
+      env: {
+        ...(process.env as Record<string, string>),
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+        PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+        HOME: '/root',
+        SHELL: '/bin/bash',
+      },
+    };
+  }
+
+  const fallbackShell = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+  return {
+    file: fallbackShell,
+    args: ['-l'],
+    cwd: fs.existsSync('/host_root') ? '/host_root' : '/',
+    env: {
+      ...(process.env as Record<string, string>),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+    },
+  };
 }
 
 export async function terminalRoutes(fastify: FastifyInstance) {
@@ -32,26 +67,19 @@ export async function terminalRoutes(fastify: FastifyInstance) {
   await getNodePty();
 
   fastify.get('/ws', { websocket: true }, (socket, req) => {
-    const hostRoot = settingsQueries.get('host_root', config.hostRoot);
-    const cwd = fs.existsSync(hostRoot) ? hostRoot : process.cwd();
-    const shell = getDefaultShell();
-    const shellArgs = config.isWindows ? [] : ['-l'];
+    const execConfig = getShellExecution();
 
     let ptyProcess: any = null;
     let fallbackProcess: any = null;
 
     if (nodePty && typeof nodePty.spawn === 'function') {
       try {
-        ptyProcess = nodePty.spawn(shell, shellArgs, {
+        ptyProcess = nodePty.spawn(execConfig.file, execConfig.args, {
           name: 'xterm-256color',
           cols: 100,
           rows: 30,
-          cwd,
-          env: {
-            ...process.env,
-            TERM: 'xterm-256color',
-            COLORTERM: 'truecolor',
-          },
+          cwd: execConfig.cwd,
+          env: execConfig.env,
         });
 
         ptyProcess.onData((data: string) => {
@@ -72,13 +100,10 @@ export async function terminalRoutes(fastify: FastifyInstance) {
 
     if (!ptyProcess) {
       // Fallback using child_process
-      fallbackProcess = spawn(shell, shellArgs, {
-        cwd,
-        env: {
-          ...process.env,
-          TERM: 'xterm-256color',
-        },
-        shell: true,
+      fallbackProcess = spawn(execConfig.file, execConfig.args, {
+        cwd: execConfig.cwd,
+        env: execConfig.env,
+        shell: false,
       });
 
       fallbackProcess.stdout?.on('data', (data: Buffer) => {

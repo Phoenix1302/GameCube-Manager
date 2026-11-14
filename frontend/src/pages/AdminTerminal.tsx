@@ -94,8 +94,8 @@ export const AdminTerminal: React.FC = () => {
 
     ws.onopen = () => {
       setConnected(true);
-      term.writeln('\x1b[1;36m🎮 Подключение к корневому терминалу GameCube-Manager установлено.\x1b[0m');
-      term.writeln('\x1b[90mСессия bash запущена с рабочим каталогом /host_root\x1b[0m\r\n');
+      term.writeln('\x1b[1;36m🎮 Подключение к хост-системе GameCube-Manager установлено.\x1b[0m');
+      term.writeln('\x1b[90mПрямой интерактивный доступ к хосту через chroot (/host_root)\x1b[0m\r\n');
 
       fitAddon.fit();
       const dims = fitAddon.proposeDimensions();
@@ -156,7 +156,7 @@ export const AdminTerminal: React.FC = () => {
           </h1>
           {!fullscreen && (
             <p className="text-xs text-slate-400 mt-0.5">
-              Полноценная интерактивная оболочка (PTY bash) с правами root в /host_root хоста.
+              Полноценная интерактивная оболочка (PTY bash) с прямым доступом к хост-системе (chroot).
             </p>
           )}
         </div>
@@ -199,7 +199,7 @@ export const AdminTerminal: React.FC = () => {
         </span>
         {[
           { label: 'htop', cmd: 'htop' },
-          { label: 'ls -la /host_root', cmd: 'ls -la /host_root' },
+          { label: 'ls -la /mnt/game_data', cmd: 'ls -la /mnt/game_data' },
           { label: 'systemctl status', cmd: 'systemctl status' },
           { label: 'uname -a', cmd: 'uname -a' },
           { label: 'df -h', cmd: 'df -h' },

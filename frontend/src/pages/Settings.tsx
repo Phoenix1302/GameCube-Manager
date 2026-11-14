@@ -21,6 +21,7 @@ import {
   Magnet,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 interface CacheStats {
   imageCount: number;
@@ -36,13 +37,14 @@ interface CacheStats {
 }
 
 export const Settings: React.FC = () => {
+  const { isAdmin, user } = useAuth();
   const [settings, setSettings] = useState<Record<string, string>>({
     qbittorrent_url: 'http://127.0.0.1:8080',
     qbittorrent_user: 'admin',
     qbittorrent_pass: '',
     steamgriddb_api_key: '',
-    steam_userdata_path: '/host_root/home/deck/.local/share/Steam/userdata',
-    host_root: '/host_root',
+    steam_userdata_path: '/home/gamecube/.local/share/Steam/userdata',
+    host_root: '/',
     cache_max_size_mb: '500',
     cache_max_age_days: '14',
     cache_auto_clean: 'true',
@@ -75,8 +77,10 @@ export const Settings: React.FC = () => {
 
   useEffect(() => {
     loadSettings();
-    loadCacheStats();
-  }, []);
+    if (isAdmin) {
+      loadCacheStats();
+    }
+  }, [isAdmin]);
 
   const loadCacheStats = async () => {
     try {
@@ -207,10 +211,12 @@ export const Settings: React.FC = () => {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
             <SettingsIcon className="w-7 h-7 text-steam-accent" />
-            Системные настройки
+            {isAdmin ? 'Системные настройки' : 'Личные настройки пользователя'}
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Конфигурация интеграций с qBittorrent, SteamGridDB API и путей к библиотеке Steam.
+            {isAdmin
+              ? 'Конфигурация интеграций с qBittorrent, SteamGridDB API и путей к библиотеке Steam.'
+              : 'Персональная настройка сессии RuTracker и способов добавления раздач в торрент-клиент.'}
           </p>
         </div>
 
@@ -223,149 +229,164 @@ export const Settings: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">
-        {/* qBittorrent Container Status Section */}
-        <div className="p-5 sm:p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <DownloadCloud className="w-5 h-5 text-steam-cyan" />
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  Встроенный торрент-клиент qBittorrent
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Контейнер
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Работает в изолированном контейнере внутри GameCube Pod на порту 8085 (не конфликтует с нативным клиентом хоста).
-                </p>
+        {/* qBittorrent Container Status Section - Admin only */}
+        {isAdmin && (
+          <div className="p-5 sm:p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <DownloadCloud className="w-5 h-5 text-steam-cyan" />
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Встроенный торрент-клиент qBittorrent
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Контейнер
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Работает в изолированном контейнере внутри GameCube Pod на порту 8085 (не конфликтует с нативным клиентом хоста).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/qbittorrent/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-cyan/15 hover:bg-steam-cyan/25 text-xs font-semibold text-steam-cyan border border-steam-cyan/30 transition-colors"
+                  title="Открыть полный веб-интерфейс qBittorrent WebUI"
+                >
+                  <span>Открыть Web UI</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={testQBittorrent}
+                  disabled={testingQb}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer"
+                >
+                  {testingQb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  <span>Проверить статус</span>
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <a
-                href="/qbittorrent/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-cyan/15 hover:bg-steam-cyan/25 text-xs font-semibold text-steam-cyan border border-steam-cyan/30 transition-colors"
-                title="Открыть полный веб-интерфейс qBittorrent WebUI"
+
+            {qbResult && (
+              <div
+                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  qbResult.success
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-red-500/15 border-red-500/30 text-red-300'
+                }`}
               >
-                <span>Открыть Web UI</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+                {qbResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                )}
+                <span>{qbResult.message}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-steam-border/40 text-xs">
+              <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
+                <span className="text-slate-400 block text-[11px]">WebUI порт</span>
+                <span className="font-mono font-bold text-white">127.0.0.1:8085</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
+                <span className="text-slate-400 block text-[11px]">Peer порт</span>
+                <span className="font-mono font-bold text-white">6882 (TCP/UDP)</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
+                <span className="text-slate-400 block text-[11px]">Логин</span>
+                <span className="font-mono font-bold text-white">admin</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
+                <span className="text-slate-400 block text-[11px]">Пароль</span>
+                <span className="font-mono font-bold text-white">adminadmin</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SteamGridDB Section - Admin only */}
+        {isAdmin && (
+          <div className="p-5 sm:p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <ImageIcon className="w-5 h-5 text-steam-accent" />
+                <h3 className="text-base font-bold text-white">SteamGridDB API</h3>
+              </div>
               <button
                 type="button"
-                onClick={testQBittorrent}
-                disabled={testingQb}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer"
+                onClick={testSteamGridDb}
+                disabled={testingGrid}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer self-start sm:self-auto"
               >
-                {testingQb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                <span>Проверить статус</span>
+                {testingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                <span>Проверить ключ</span>
               </button>
             </div>
-          </div>
 
-          {qbResult && (
-            <div
-              className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                qbResult.success
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                  : 'bg-red-500/15 border-red-500/30 text-red-300'
-              }`}
-            >
-              {qbResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              )}
-              <span>{qbResult.message}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-steam-border/40 text-xs">
-            <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
-              <span className="text-slate-400 block text-[11px]">WebUI порт</span>
-              <span className="font-mono font-bold text-white">127.0.0.1:8085</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
-              <span className="text-slate-400 block text-[11px]">Peer порт</span>
-              <span className="font-mono font-bold text-white">6882 (TCP/UDP)</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
-              <span className="text-slate-400 block text-[11px]">Логин</span>
-              <span className="font-mono font-bold text-white">admin</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-steam-nav/60 border border-steam-border/40">
-              <span className="text-slate-400 block text-[11px]">Пароль</span>
-              <span className="font-mono font-bold text-white">adminadmin</span>
-            </div>
-          </div>
-        </div>
-
-        {/* SteamGridDB Section */}
-        <div className="p-5 sm:p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <ImageIcon className="w-5 h-5 text-steam-accent" />
-              <h3 className="text-base font-bold text-white">SteamGridDB API</h3>
-            </div>
-            <button
-              type="button"
-              onClick={testSteamGridDb}
-              disabled={testingGrid}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer self-start sm:self-auto"
-            >
-              {testingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-              <span>Проверить ключ</span>
-            </button>
-          </div>
-
-          {gridResult && (
-            <div
-              className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                gridResult.success
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                  : 'bg-red-500/15 border-red-500/30 text-red-300'
-              }`}
-            >
-              {gridResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              )}
-              <span>{gridResult.message}</span>
-            </div>
-          )}
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300">API Key SteamGridDB</label>
-              <a
-                href="https://www.steamgriddb.com/profile/preferences/api"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-steam-accent hover:underline flex items-center gap-1"
+            {gridResult && (
+              <div
+                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  gridResult.success
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-red-500/15 border-red-500/30 text-red-300'
+                }`}
               >
-                <span>Получить бесплатный ключ</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <input
-              type="password"
-              value={settings.steamgriddb_api_key || ''}
-              onChange={(e) => handleChange('steamgriddb_api_key', e.target.value)}
-              placeholder="Вставьте ваш токен SteamGridDB..."
-              className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-            />
-          </div>
-        </div>
+                {gridResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                )}
+                <span>{gridResult.message}</span>
+              </div>
+            )}
 
-        {/* RuTracker Integration */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-300">API Key SteamGridDB</label>
+                <a
+                  href="https://www.steamgriddb.com/profile/preferences/api"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-steam-accent hover:underline flex items-center gap-1"
+                >
+                  <span>Получить бесплатный ключ</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <input
+                type="password"
+                value={settings.steamgriddb_api_key || ''}
+                onChange={(e) => handleChange('steamgriddb_api_key', e.target.value)}
+                placeholder="Вставьте ваш токен SteamGridDB (например: 9a7b...)"
+                className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* RuTracker Integration - Accessible to both Admin and Users */}
         <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <DownloadCloud className="w-5 h-5 text-emerald-400" />
               <div>
-                <h3 className="text-base font-bold text-white">Интеграция с RuTracker (Автопоиск раздач)</h3>
-                <p className="text-xs text-slate-400">Позволяет находить и скачивать раздачи прямо из карточки любой игры</p>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Интеграция с RuTracker (Автопоиск раздач)</span>
+                  {!isAdmin && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Личные настройки
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {isAdmin
+                    ? 'Позволяет находить и скачивать раздачи прямо из карточки любой игры (системные параметры по умолчанию)'
+                    : 'Ваша персональная сессия для поиска и запуска торрентов прямо из карточки игры'}
+                </p>
               </div>
             </div>
             <button
@@ -400,7 +421,7 @@ export const Settings: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-slate-300">
-                  Cookie сессии (bb_data) — <span className="text-emerald-400 font-bold">Рекомендуемый способ</span>
+                  Cookie сессии (bb_data / bb_session) — <span className="text-emerald-400 font-bold">Рекомендуемый способ</span>
                 </label>
                 <a
                   href="https://rutracker.org"
@@ -420,7 +441,8 @@ export const Settings: React.FC = () => {
                 className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Для обхода Cloudflare: вставьте <code>bb_session=...; cf_clearance=...</code> или скопируйте всю строку <code>Cookie</code> из вкладки <b>Сеть (Network)</b> DevTools.
+                Для обхода Cloudflare: вставьте <code>bb_session=...; cf_clearance=...</code> или скопируйте всю строку <code>Cookie</code> из вкладки <b>Сеть (Network)</b> DevTools браузера.
+                {!isAdmin && <span className="text-steam-cyan block mt-0.5">Ваши cookie хранятся строго в вашем личном профиле.</span>}
               </p>
             </div>
 
@@ -528,189 +550,193 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* System & Steam Paths */}
-        <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex items-center gap-2.5">
-            <HardDrive className="w-5 h-5 text-slate-400" />
-            <h3 className="text-base font-bold text-white">Пути файловой системы Steam & Хоста</h3>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Путь к директории userdata Steam
-              </label>
-              <input
-                type="text"
-                value={settings.steam_userdata_path || ''}
-                onChange={(e) => handleChange('steam_userdata_path', e.target.value)}
-                placeholder="/host_root/home/deck/.local/share/Steam/userdata"
-                className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Используется для чтения и сохранения ярлыков <code>shortcuts.vdf</code> и постеров в <code>grid/</code>.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Корневой путь файлового менеджера и терминала (Host Root)
-              </label>
-              <input
-                type="text"
-                value={settings.host_root || ''}
-                onChange={(e) => handleChange('host_root', e.target.value)}
-                placeholder="/host_root"
-                className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Cache & Storage Management */}
-        <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
+        {/* System & Steam Paths - Admin only */}
+        {isAdmin && (
+          <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
             <div className="flex items-center gap-2.5">
-              <Database className="w-5 h-5 text-steam-accent" />
+              <HardDrive className="w-5 h-5 text-slate-400" />
+              <h3 className="text-base font-bold text-white">Пути файловой системы Steam & Хоста</h3>
+            </div>
+
+            <div className="space-y-4">
               <div>
-                <h3 className="text-base font-bold text-white">Управление кэшем и дисковым пространством</h3>
-                <p className="text-xs text-slate-400">Автоматическая очистка обложек и записей для экономии места на диске</p>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Путь к директории userdata Steam
+                </label>
+                <input
+                  type="text"
+                  value={settings.steam_userdata_path || ''}
+                  onChange={(e) => handleChange('steam_userdata_path', e.target.value)}
+                  placeholder="/home/gamecube/.local/share/Steam/userdata"
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Используется для чтения и сохранения ярлыков <code>shortcuts.vdf</code> и постеров в <code>grid/</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Корневой путь файлового менеджера и терминала (Host Root)
+                </label>
+                <input
+                  type="text"
+                  value={settings.host_root || ''}
+                  onChange={(e) => handleChange('host_root', e.target.value)}
+                  placeholder="/"
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={loadCacheStats}
-              title="Обновить размер кэша"
-              className="p-2 rounded-xl bg-steam-nav hover:bg-slate-800 text-slate-300 hover:text-white border border-steam-border transition-all flex items-center gap-1.5 text-xs cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Обновить</span>
-            </button>
           </div>
+        )}
 
-          {/* Clean result banner */}
-          {cleanResult && (
-            <div
-              className={`p-3.5 rounded-xl border text-xs font-medium flex items-center gap-2.5 animate-in fade-in duration-200 ${
-                cleanResult.success
-                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                  : 'bg-red-500/15 text-red-300 border-red-500/30'
-              }`}
-            >
-              {cleanResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              )}
-              <span>{cleanResult.message}</span>
-            </div>
-          )}
-
-          {/* Metrics summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
-              <span className="text-[11px] font-semibold text-slate-400 block mb-1">Кэш картинок</span>
-              <span className="text-base font-bold text-white font-mono">{cacheStats?.imageSizeFormatted || '0 B'}</span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">{cacheStats?.imageCount || 0} файлов на SSD</span>
-            </div>
-            <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
-              <span className="text-[11px] font-semibold text-slate-400 block mb-1">База данных</span>
-              <span className="text-base font-bold text-white font-mono">{cacheStats?.dbSizeFormatted || '0 B'}</span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">SQLite (WAL + 64MB)</span>
-            </div>
-            <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
-              <span className="text-[11px] font-semibold text-slate-400 block mb-1">Лимит на диске</span>
-              <span className="text-base font-bold text-steam-accent font-mono">{settings.cache_max_size_mb || '500'} MB</span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">LRU-вытеснение</span>
-            </div>
-            <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
-              <span className="text-[11px] font-semibold text-slate-400 block mb-1">Автоочистка</span>
-              <span className="text-base font-bold text-emerald-400 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span>Каждые 30м</span>
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">Фоновый процесс</span>
-            </div>
-          </div>
-
-          {/* Cache Settings Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Максимальный объем кэша изображений
-              </label>
-              <select
-                value={settings.cache_max_size_mb || '500'}
-                onChange={(e) => handleChange('cache_max_size_mb', e.target.value)}
-                className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+        {/* Cache & Storage Management - Admin only */}
+        {isAdmin && (
+          <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Database className="w-5 h-5 text-steam-accent" />
+                <div>
+                  <h3 className="text-base font-bold text-white">Управление кэшем и дисковым пространством</h3>
+                  <p className="text-xs text-slate-400">Автоматическая очистка обложек и записей для экономии места на диске</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loadCacheStats}
+                title="Обновить размер кэша"
+                className="p-2 rounded-xl bg-steam-nav hover:bg-slate-800 text-slate-300 hover:text-white border border-steam-border transition-all flex items-center gap-1.5 text-xs cursor-pointer"
               >
-                <option value="100">100 МБ (Минимальный, для небольших дисков)</option>
-                <option value="250">250 МБ (Компактный)</option>
-                <option value="500">500 МБ (Рекомендуемый, баланс скорости и места)</option>
-                <option value="1000">1000 МБ (1 ГБ, для большой коллекции)</option>
-                <option value="2000">2000 МБ (2 ГБ, максимум кэша)</option>
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                При превышении кэш автоматически удаляет самые старые изображения (LRU) до 70% от лимита.
-              </p>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Обновить</span>
+              </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Срок хранения неиспользуемых картинок (TTL)
-              </label>
-              <select
-                value={settings.cache_max_age_days || '14'}
-                onChange={(e) => handleChange('cache_max_age_days', e.target.value)}
-                className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+            {/* Clean result banner */}
+            {cleanResult && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs font-medium flex items-center gap-2.5 animate-in fade-in duration-200 ${
+                  cleanResult.success
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-red-500/15 text-red-300 border-red-500/30'
+                }`}
               >
-                <option value="3">3 дня (Агрессивная экономия диска)</option>
-                <option value="7">7 дней (1 неделя)</option>
-                <option value="14">14 дней (2 недели, стандарт)</option>
-                <option value="30">30 дней (1 месяц)</option>
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Файлы, к которым не обращались дольше этого срока, удаляются автоматически.
-              </p>
+                {cleanResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                )}
+                <span>{cleanResult.message}</span>
+              </div>
+            )}
+
+            {/* Metrics summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
+                <span className="text-[11px] font-semibold text-slate-400 block mb-1">Кэш картинок</span>
+                <span className="text-base font-bold text-white font-mono">{cacheStats?.imageSizeFormatted || '0 B'}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">{cacheStats?.imageCount || 0} файлов на SSD</span>
+              </div>
+              <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
+                <span className="text-[11px] font-semibold text-slate-400 block mb-1">База данных</span>
+                <span className="text-base font-bold text-white font-mono">{cacheStats?.dbSizeFormatted || '0 B'}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">SQLite (WAL + 64MB)</span>
+              </div>
+              <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
+                <span className="text-[11px] font-semibold text-slate-400 block mb-1">Лимит на диске</span>
+                <span className="text-base font-bold text-steam-accent font-mono">{settings.cache_max_size_mb || '500'} MB</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">LRU-вытеснение</span>
+              </div>
+              <div className="p-3 bg-steam-nav/70 rounded-xl border border-steam-border/60">
+                <span className="text-[11px] font-semibold text-slate-400 block mb-1">Автоочистка</span>
+                <span className="text-base font-bold text-emerald-400 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Каждые 30м</span>
+                </span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Фоновый процесс</span>
+              </div>
+            </div>
+
+            {/* Cache Settings Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Максимальный объем кэша изображений
+                </label>
+                <select
+                  value={settings.cache_max_size_mb || '500'}
+                  onChange={(e) => handleChange('cache_max_size_mb', e.target.value)}
+                  className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                >
+                  <option value="100">100 МБ (Минимальный, для небольших дисков)</option>
+                  <option value="250">250 МБ (Компактный)</option>
+                  <option value="500">500 МБ (Рекомендуемый, баланс скорости и места)</option>
+                  <option value="1000">1000 МБ (1 ГБ, для большой коллекции)</option>
+                  <option value="2000">2000 МБ (2 ГБ, максимум кэша)</option>
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  При превышении кэш автоматически удаляет самые старые изображения (LRU) до 70% от лимита.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Срок хранения неиспользуемых картинок (TTL)
+                </label>
+                <select
+                  value={settings.cache_max_age_days || '14'}
+                  onChange={(e) => handleChange('cache_max_age_days', e.target.value)}
+                  className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                >
+                  <option value="3">3 дня (Агрессивная экономия диска)</option>
+                  <option value="7">7 дней (1 неделя)</option>
+                  <option value="14">14 дней (2 недели, стандарт)</option>
+                  <option value="30">30 дней (1 месяц)</option>
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Файлы, к которым не обращались дольше этого срока, удаляются автоматически.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="cache_auto_clean"
+                checked={settings.cache_auto_clean === 'true'}
+                onChange={(e) => handleChange('cache_auto_clean', e.target.checked ? 'true' : 'false')}
+                className="w-4 h-4 rounded text-steam-blue bg-steam-nav border-steam-border focus:ring-0 cursor-pointer"
+              />
+              <label htmlFor="cache_auto_clean" className="text-xs text-slate-300 cursor-pointer select-none">
+                Включить регулярную фоновую очистку (каждые 30 минут удаляет устаревшие записи каталога и старые изображения)
+              </label>
+            </div>
+
+            {/* Manual Clean Action Buttons */}
+            <div className="pt-2 border-t border-steam-border/60 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={cleaningCache}
+                onClick={() => handleCleanCache('images')}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-steam-border text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                {cleaningCache ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-amber-400" />}
+                <span>Очистить кэш картинок сейчас</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={cleaningCache}
+                onClick={() => handleCleanCache('all')}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                {cleaningCache ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-red-400" />}
+                <span>Очистить весь кэш (БД + Картинки)</span>
+              </button>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="cache_auto_clean"
-              checked={settings.cache_auto_clean === 'true'}
-              onChange={(e) => handleChange('cache_auto_clean', e.target.checked ? 'true' : 'false')}
-              className="w-4 h-4 rounded text-steam-blue bg-steam-nav border-steam-border focus:ring-0 cursor-pointer"
-            />
-            <label htmlFor="cache_auto_clean" className="text-xs text-slate-300 cursor-pointer select-none">
-              Включить регулярную фоновую очистку (каждые 30 минут удаляет устаревшие записи каталога и старые изображения)
-            </label>
-          </div>
-
-          {/* Manual Clean Action Buttons */}
-          <div className="pt-2 border-t border-steam-border/60 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={cleaningCache}
-              onClick={() => handleCleanCache('images')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-steam-border text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
-            >
-              {cleaningCache ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-amber-400" />}
-              <span>Очистить кэш картинок сейчас</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={cleaningCache}
-              onClick={() => handleCleanCache('all')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
-            >
-              {cleaningCache ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-red-400" />}
-              <span>Очистить весь кэш (БД + Картинки)</span>
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Save button */}
         <div className="flex justify-end pt-2">
@@ -720,7 +746,7 @@ export const Settings: React.FC = () => {
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-steam-blue to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{saving ? 'Сохранение...' : 'Сохранить все настройки'}</span>
+            <span>{saving ? 'Сохранение...' : (isAdmin ? 'Сохранить все настройки' : 'Сохранить личные настройки')}</span>
           </button>
         </div>
       </form>

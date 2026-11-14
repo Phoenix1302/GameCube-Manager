@@ -6,7 +6,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-web
 Pod=gamecube.pod
-Image=localhost/gamecube-manager:1.0.0
+Image=localhost/gamecube-manager:1.0.1
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
 Environment=PORT=3000

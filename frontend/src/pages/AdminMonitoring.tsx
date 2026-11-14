@@ -654,6 +654,14 @@ export const AdminMonitoring: React.FC = () => {
               const freeBytes = Math.max(0, disk.size - disk.used);
               const isHigh = disk.use > 90;
               const isWarning = disk.use > 75;
+              const getMountDescription = (mount: string) => {
+                if (mount === '/') return 'Системный раздел (Root)';
+                if (mount === '/mnt/game_data' || mount.startsWith('/mnt/game_data')) return 'Игровой накопитель';
+                if (mount === '/boot/efi') return 'EFI раздел загрузчика';
+                if (mount.includes('SteamLibrary')) return 'Библиотека Steam';
+                return null;
+              };
+              const desc = getMountDescription(disk.mount);
 
               return (
                 <div
@@ -661,10 +669,15 @@ export const AdminMonitoring: React.FC = () => {
                   className="p-4 rounded-xl bg-steam-nav/90 border border-steam-border/60 space-y-3 hover:border-steam-blue/60 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-xs sm:text-sm text-slate-200 font-mono">
                         {disk.mount}
                       </span>
+                      {desc && (
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          • {desc}
+                        </span>
+                      )}
                       {disk.type && (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
                           {disk.type}

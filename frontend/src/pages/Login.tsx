@@ -58,7 +58,7 @@ export const Login: React.FC = () => {
           <div className="flex items-center justify-center gap-2 mb-1">
             <h2 className="text-2xl font-extrabold text-white tracking-tight">GAMECUBE MANAGER</h2>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30">
-              v1.0.0
+              v1.0.1
             </span>
           </div>
           <p className="text-xs text-slate-400">
@@ -83,7 +83,7 @@ export const Login: React.FC = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Имя пользователя или admin"
+                placeholder="Введите имя пользователя"
                 required
                 autoFocus
                 className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl pl-10 pr-4 py-3 border border-steam-border focus:outline-none focus:border-steam-blue transition-colors"
@@ -135,12 +135,6 @@ export const Login: React.FC = () => {
             </button>
           </div>
         </form>
-
-        <div className="mt-8 pt-5 border-t border-steam-border/60 text-center space-y-2">
-          <p className="text-[11px] text-slate-400">
-            Учётные записи пользователей создаются администратором системы в разделе управления.
-          </p>
-        </div>
       </div>
     </div>
   );

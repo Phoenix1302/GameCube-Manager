@@ -88,7 +88,7 @@ podman run -d \
     -e HOST_ROOT=/host_root \
     -e STEAM_USERDATA_PATH="${STEAM_USERDATA_PATH}" \
     -e QBITTORRENT_URL=http://127.0.0.1:8085 \
-    localhost/gamecube-manager:1.0.0
+    localhost/gamecube-manager:1.0.1
 
 # 3. Run Headless qBittorrent inside the Pod
 echo "==> Starting Headless qBittorrent container '${TORRENT_CONTAINER}'..."

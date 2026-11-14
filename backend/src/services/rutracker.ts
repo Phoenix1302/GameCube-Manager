@@ -89,9 +89,14 @@ export function getRutrackerBaseUrl(): string {
  * Builds cookie header string from settings.
  * Accepts full cookie string (e.g. bb_session=...; cf_clearance=...),
  * key-value pairs, or a raw cookie value.
+ * Supports per-user cookies with fallback to system settings.
  */
-export function getRutrackerCookieHeader(): string {
-  const raw = settingsQueries.get('rutracker_cookie', '').trim();
+export function getRutrackerCookieHeader(userId?: number): string {
+  const raw = (
+    userId
+      ? settingsQueries.getUserSetting(userId, 'rutracker_cookie')
+      : settingsQueries.get('rutracker_cookie', '')
+  ).trim();
   if (!raw) return '';
 
   // If user pasted pairs like "bb_session=...; cf_clearance=..." or "bb_data=..."
@@ -107,14 +112,16 @@ export function getRutrackerCookieHeader(): string {
  * Common browser headers to avoid anti-bot blocks.
  * Dynamically uses the user's browser User-Agent so Cloudflare cf_clearance validation passes.
  */
-export function getBrowserHeaders(extraCookie?: string, customUa?: string) {
-  const cookie = extraCookie || getRutrackerCookieHeader();
+export function getBrowserHeaders(extraCookie?: string, customUa?: string, userId?: number) {
+  const cookie = extraCookie || getRutrackerCookieHeader(userId);
   const ua =
     customUa ||
-    settingsQueries.get(
-      'rutracker_user_agent',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0'
-    );
+    (userId
+      ? settingsQueries.getUserSetting(userId, 'rutracker_user_agent')
+      : settingsQueries.get(
+          'rutracker_user_agent',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0'
+        ));
 
   return {
     'User-Agent': ua,
@@ -141,8 +148,12 @@ export function cleanGameTitleForSearch(title: string): string {
 /**
  * Checks if RuTracker integration has credentials or cookies configured.
  */
-export function isRutrackerConfigured(): boolean {
-  const cookie = settingsQueries.get('rutracker_cookie', '').trim();
+export function isRutrackerConfigured(userId?: number): boolean {
+  const cookie = (
+    userId
+      ? settingsQueries.getUserSetting(userId, 'rutracker_cookie')
+      : settingsQueries.get('rutracker_cookie', '')
+  ).trim();
   const login = settingsQueries.get('rutracker_login', '').trim();
   return cookie.length > 0 || login.length > 0;
 }
@@ -151,20 +162,20 @@ export function isRutrackerConfigured(): boolean {
  * Search RuTracker for game releases.
  * Parses topic id, title, category, size, seeds, leechers, and date.
  */
-export async function searchRutracker(query: string): Promise<RutrackerSearchResult> {
+export async function searchRutracker(query: string, userId?: number): Promise<RutrackerSearchResult> {
   const cleanQ = cleanGameTitleForSearch(query);
   if (!cleanQ) {
     return { configured: true, query, total: 0, releases: [] };
   }
 
-  const cookie = getRutrackerCookieHeader();
+  const cookie = getRutrackerCookieHeader(userId);
   if (!cookie) {
     return {
       configured: false,
       query: cleanQ,
       total: 0,
       releases: [],
-      error: 'Учетные данные RuTracker не настроены. Перейдите в Настройки и укажите cookie bb_data или логин.',
+      error: 'Учетные данные RuTracker не настроены. Перейдите в Настройки и укажите cookie bb_session или cf_clearance.',
     };
   }
 
@@ -176,7 +187,7 @@ export async function searchRutracker(query: string): Promise<RutrackerSearchRes
     const response = await axios.get(searchUrl, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: getBrowserHeaders(cookie),
+      headers: getBrowserHeaders(cookie, undefined, userId),
     });
 
     const html = new TextDecoder('windows-1251').decode(response.data);
@@ -384,8 +395,8 @@ export function buildMagnetUri(btih: string, title?: string): string {
  * Resolves a Magnet link for a given topicId.
  * First tries scraping viewtopic.php; falls back to computing SHA-1 from .torrent buffer.
  */
-export async function getRutrackerMagnet(topicId: number, title?: string): Promise<string> {
-  const cookie = getRutrackerCookieHeader();
+export async function getRutrackerMagnet(topicId: number, title?: string, userId?: number): Promise<string> {
+  const cookie = getRutrackerCookieHeader(userId);
   const baseUrl = getRutrackerBaseUrl();
 
   // 1. Try scraping from viewtopic.php HTML
@@ -393,7 +404,7 @@ export async function getRutrackerMagnet(topicId: number, title?: string): Promi
     const topicRes = await axios.get(`${baseUrl}/forum/viewtopic.php?t=${topicId}`, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: getBrowserHeaders(cookie),
+      headers: getBrowserHeaders(cookie, undefined, userId),
     });
 
     const html = new TextDecoder('windows-1251').decode(topicRes.data);
@@ -430,7 +441,7 @@ export async function getRutrackerMagnet(topicId: number, title?: string): Promi
     responseType: 'arraybuffer',
     timeout: 10000,
     headers: {
-      ...getBrowserHeaders(cookie),
+      ...getBrowserHeaders(cookie, undefined, userId),
       Referer: `${baseUrl}/forum/viewtopic.php?t=${topicId}`,
     },
   });
@@ -454,10 +465,11 @@ export async function getRutrackerMagnet(topicId: number, title?: string): Promi
 export async function downloadTorrentToQBit(
   topicId: number,
   savePath?: string,
-  requestedMode?: 'magnet' | 'torrent' | 'auto'
+  requestedMode?: 'magnet' | 'torrent' | 'auto',
+  userId?: number
 ): Promise<{ success: boolean; message: string; mode: string; magnet?: string }> {
   const preferredMode = !requestedMode || requestedMode === 'auto'
-    ? settingsQueries.get('rutracker_download_mode', 'magnet')
+    ? (userId ? settingsQueries.getUserSetting(userId, 'rutracker_download_mode', 'magnet') : settingsQueries.get('rutracker_download_mode', 'magnet'))
     : requestedMode;
 
   const { qbUrl, client } = await getQBitClient();
@@ -465,7 +477,7 @@ export async function downloadTorrentToQBit(
   // Mode A: Magnet link (fast, direct, doesn't consume tracker download limits)
   if (preferredMode === 'magnet') {
     try {
-      const magnet = await getRutrackerMagnet(topicId);
+      const magnet = await getRutrackerMagnet(topicId, undefined, userId);
       const params = new URLSearchParams();
       params.append('urls', magnet);
       if (savePath) {
@@ -494,7 +506,7 @@ export async function downloadTorrentToQBit(
   }
 
   // Mode B: .torrent file via dl.php
-  const cookie = getRutrackerCookieHeader();
+  const cookie = getRutrackerCookieHeader(userId);
   if (!cookie) {
     throw new Error('RuTracker cookie не настроены');
   }
@@ -506,7 +518,7 @@ export async function downloadTorrentToQBit(
     responseType: 'arraybuffer',
     timeout: 10000,
     headers: {
-      ...getBrowserHeaders(cookie),
+      ...getBrowserHeaders(cookie, undefined, userId),
       Referer: `${baseUrl}/forum/viewtopic.php?t=${topicId}`,
     },
   });
@@ -547,8 +559,8 @@ export async function downloadTorrentToQBit(
 /**
  * Tests RuTracker connection and credentials
  */
-export async function testRutrackerConnection(customUa?: string): Promise<{ success: boolean; message: string; username?: string }> {
-  const cookie = getRutrackerCookieHeader();
+export async function testRutrackerConnection(customUa?: string, userId?: number): Promise<{ success: boolean; message: string; username?: string }> {
+  const cookie = getRutrackerCookieHeader(userId);
   const login = settingsQueries.get('rutracker_login', '').trim();
   const baseUrl = getRutrackerBaseUrl();
 
@@ -563,7 +575,7 @@ export async function testRutrackerConnection(customUa?: string): Promise<{ succ
     const res = await axios.get(`${baseUrl}/forum/index.php`, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: getBrowserHeaders(cookie, customUa),
+      headers: getBrowserHeaders(cookie, customUa, userId),
     });
 
     const html = new TextDecoder('windows-1251').decode(res.data);

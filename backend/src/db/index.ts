@@ -247,6 +247,29 @@ export const settingsQueries = {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `).run(key, value);
   },
+  getUserSetting: (userId: number, key: string, defaultValue = ''): string => {
+    const userRow = db.prepare('SELECT value FROM settings WHERE key = ?').get(`user:${userId}:${key}`) as SettingRow | undefined;
+    if (userRow && userRow.value.trim().length > 0) {
+      return userRow.value;
+    }
+    return settingsQueries.get(key, defaultValue);
+  },
+  setUserSetting: (userId: number, key: string, value: string): void => {
+    settingsQueries.set(`user:${userId}:${key}`, value);
+  },
+  getUserSettings: (userId: number): Record<string, string> => {
+    const globalSettings = settingsQueries.getAll();
+    const prefix = `user:${userId}:`;
+    const userRows = db.prepare('SELECT key, value FROM settings WHERE key LIKE ?').all(`${prefix}%`) as SettingRow[];
+    const result: Record<string, string> = { ...globalSettings };
+    for (const row of userRows) {
+      const strippedKey = row.key.slice(prefix.length);
+      if (row.value.trim().length > 0) {
+        result[strippedKey] = row.value;
+      }
+    }
+    return result;
+  },
   getAll: (): Record<string, string> => {
     const rows = db.prepare('SELECT key, value FROM settings').all() as SettingRow[];
     const result: Record<string, string> = {};

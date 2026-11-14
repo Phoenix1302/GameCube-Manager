@@ -25,7 +25,7 @@ podman run -d `
     -e NODE_ENV=production `
     -e HOST_ROOT=/host_root `
     -e QBITTORRENT_URL=http://127.0.0.1:8085 `
-    localhost/gamecube-manager:1.0.0
+    localhost/gamecube-manager:1.0.1
 
 Write-Host "==> Starting Headless qBittorrent Container (Internal WebUI 8085 / Peer 6882)..." -ForegroundColor Cyan
 podman run -d `

@@ -28,6 +28,7 @@ export const Navbar: React.FC = () => {
     { name: 'Торренты', path: '/torrents', icon: DownloadCloud },
     { name: 'Wishlist', path: '/wishlist', icon: Heart },
     { name: 'Steam Library', path: '/steam', icon: FolderSync },
+    { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
   // Navigation for administrator (Management suite + Torrents ONLY; no gaming/user sections)
