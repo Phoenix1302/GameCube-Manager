@@ -5,7 +5,7 @@ Requires=gamecube-pod.service
 
 [Container]
 ContainerName=gamecube-web
-Pod=gamecube-pod.pod
+Pod=gamecube.pod
 Image=localhost/gamecube-manager:1.0.0
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
@@ -13,9 +13,12 @@ Environment=PORT=3000
 Environment=HOST=127.0.0.1
 Environment=NODE_ENV=production
 Environment=HOST_ROOT=/host_root
-Environment=STEAM_USERDATA_PATH=/host_root/home/deck/.local/share/Steam/userdata
+Environment=STEAM_USERDATA_PATH=/host_root/home/gamecube/.local/share/Steam/userdata
 Environment=QBITTORRENT_URL=http://127.0.0.1:8085
 SecurityLabelDisable=true
 
 [Service]
 Restart=always
+
+[Install]
+WantedBy=default.target

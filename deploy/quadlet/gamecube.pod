@@ -1,6 +1,7 @@
 [Unit]
 Description=GameCube-Manager Podman Pod (DIY Steam Machine)
 After=network-online.target
+Wants=gamecube-web.service gamecube-proxy.service gamecube-torrent.service
 
 [Pod]
 PodName=gamecube-pod

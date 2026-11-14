@@ -134,6 +134,7 @@ cat << EOF > "${QUADLET_DIR}/gamecube.pod"
 [Unit]
 Description=GameCube-Manager Podman Pod (DIY Steam Machine)
 After=network-online.target
+Wants=gamecube-web.service gamecube-proxy.service gamecube-torrent.service
 
 [Pod]
 PodName=gamecube-pod
@@ -155,7 +156,7 @@ Requires=gamecube-pod.service
 
 [Container]
 ContainerName=gamecube-web
-Pod=gamecube-pod.pod
+Pod=gamecube.pod
 Image=localhost/gamecube-manager:1.0.0
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
@@ -169,6 +170,9 @@ SecurityLabelDisable=true
 
 [Service]
 Restart=always
+
+[Install]
+WantedBy=default.target
 EOF
 
 # Torrent container
@@ -180,7 +184,7 @@ Requires=gamecube-pod.service
 
 [Container]
 ContainerName=gamecube-torrent
-Pod=gamecube-pod.pod
+Pod=gamecube.pod
 Image=localhost/gamecube-torrent:1.0.0
 Volume=${DOWNLOADS_DIR}:/downloads:rw
 Volume=gamecube-torrent-config:/config:rw
@@ -188,6 +192,9 @@ SecurityLabelDisable=true
 
 [Service]
 Restart=always
+
+[Install]
+WantedBy=default.target
 EOF
 
 # Nginx SSL Proxy container
@@ -199,12 +206,15 @@ Requires=gamecube-pod.service
 
 [Container]
 ContainerName=gamecube-proxy
-Pod=gamecube-pod.pod
+Pod=gamecube.pod
 Image=localhost/gamecube-proxy:1.0.0
 Volume=gamecube-certs:/etc/nginx/certs:rw
 
 [Service]
 Restart=always
+
+[Install]
+WantedBy=default.target
 EOF
 
 echo -e "    ${GREEN}✔${NC} Quadlets installed to: ${CYAN}${QUADLET_DIR}${NC}"
@@ -212,7 +222,8 @@ echo -e "    ${GREEN}✔${NC} Quadlets installed to: ${CYAN}${QUADLET_DIR}${NC}"
 # 7. Reload and Start Service
 echo -e "\n${BLUE}==>${NC} ${BOLD}7. Starting GameCube-Manager service...${NC}"
 systemctl --user daemon-reload
-systemctl --user restart gamecube-pod.service
+systemctl --user enable --now gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
+systemctl --user restart gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
 
 # 8. Health Verification
 echo -e "    Waiting for services to initialize..."
