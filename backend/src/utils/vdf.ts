@@ -125,7 +125,9 @@ export function serializeBinaryVdf(data: Record<string, any>): Buffer {
  * CRC32(Exe + AppName) | 0x80000000
  */
 export function generateSteamAppId(exe: string, appName: string): number {
-  const combined = exe + appName;
+  const clean = exe.replace(/^["]+|["]+$/g, '');
+  const target = `"${clean}"`;
+  const combined = target + appName;
   let crc = 0 ^ -1;
   for (let i = 0; i < combined.length; i++) {
     const code = combined.charCodeAt(i);

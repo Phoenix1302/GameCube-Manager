@@ -19,6 +19,7 @@ import {
   FolderOpen,
   ArrowUpRight,
   RefreshCw,
+  RotateCcw,
   Folder,
   Trash2,
   X,
@@ -27,10 +28,12 @@ import {
   Settings2,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { SteamShortcut, SteamGridAsset } from '../types';
 
 export const SteamLibrary: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Active view tab: installed games vs non-steam shortcuts
   const [activeTab, setActiveTab] = useState<'installed' | 'shortcuts'>('installed');
@@ -141,6 +144,20 @@ export const SteamLibrary: React.FC = () => {
       console.error('Failed to load shortcuts', err);
     } finally {
       setLoadingShortcuts(false);
+    }
+  };
+
+  const [restartingSteam, setRestartingSteam] = useState(false);
+  const handleRestartSteam = async () => {
+    try {
+      setRestartingSteam(true);
+      const res = await api.post('/steam/restart-steam');
+      setSuccessMsg(res.data.message || 'Команда отправлена. Steam перезапускается...');
+      setTimeout(() => setSuccessMsg(null), 6000);
+    } catch (err: any) {
+      alert(`Ошибка: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setRestartingSteam(false);
     }
   };
 
@@ -484,94 +501,90 @@ export const SteamLibrary: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-            <Gamepad2 className="w-7 h-7 text-steam-accent" />
-            Библиотека Steam & Игры
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Управление установленными играми Steam на накопителях и интеграция сторонних игр с Proton и SteamGridDB.
-          </p>
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Row 1: Title and Primary Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+              <Gamepad2 className="w-7 h-7 text-steam-accent" />
+              Библиотека Steam & Игры
+            </h1>
+            <p className="text-sm text-slate-400 mt-1">
+              Управление установленными играми Steam на накопителях и быстрая интеграция сторонних игр с Proton и SteamGridDB.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+            <button
+              type="button"
+              onClick={handleRestartSteam}
+              disabled={restartingSteam}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover border border-steam-border text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-md disabled:opacity-50"
+              title="Перезапустить клиент Steam или обновить Game Mode, чтобы применить новые ярлыки и обложки"
+            >
+              <RotateCcw className={`w-4 h-4 text-steam-accent ${restartingSteam ? 'animate-spin' : ''}`} />
+              <span>{restartingSteam ? 'Применение...' : 'Применить в SteamOS'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openSmartModal()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Добавить стороннюю игру</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => openSmartModal()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Добавить стороннюю игру</span>
-          </button>
-
-          {/* Library Filters / File Manager Navigation */}
-          {libraries.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setSelectedLibraryPath(null)}
-                className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-md flex items-center gap-1.5 ${
-                  selectedLibraryPath === null
-                    ? 'bg-steam-blue text-white border-steam-blue shadow-cyan-500/20'
-                    : 'bg-steam-card text-slate-300 border-steam-border/80 hover:text-white hover:border-slate-500'
-                }`}
-                title="Показать игры со всех подключенных накопителей"
-              >
-                <span>Все накопители</span>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                    selectedLibraryPath === null ? 'bg-white/20 text-white' : 'bg-steam-accent/20 text-steam-accent'
-                  }`}
-                >
-                  {validGamesCount}
-                </span>
-              </button>
-
-              {libraries.map((lib, idx) => {
-                const isSelected = selectedLibraryPath === lib.path || selectedLibraryPath === lib.displayPath;
-                return (
-                  <div key={idx} className="inline-flex items-center rounded-xl overflow-hidden shadow-md">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedLibraryPath(isSelected ? null : lib.path)}
-                      className={`px-3 py-2 border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-steam-blue text-white border-steam-blue'
-                          : 'bg-steam-card text-slate-300 border-steam-border/80 hover:text-white hover:border-steam-accent'
-                      }`}
-                      title={`Фильтровать игры: показать только из ${lib.displayPath}`}
-                    >
-                      <HardDrive className="w-3.5 h-3.5 text-steam-accent" />
-                      <span className="font-mono">{lib.displayPath}</span>
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          isSelected ? 'bg-white/20 text-white' : 'bg-steam-accent/20 text-steam-accent'
-                        }`}
-                      >
-                        {lib.gamesCount} игр
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(`/files?path=${encodeURIComponent(lib.displayPath + '/steamapps/common')}`)
-                      }
-                      className={`px-2.5 py-2 border border-l-0 text-xs transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-steam-blue/90 text-white border-steam-blue hover:bg-steam-blue'
-                          : 'bg-steam-nav text-slate-400 border-steam-border/80 hover:text-white hover:bg-slate-700'
-                      }`}
-                      title="Открыть каталог steamapps/common в файловом менеджере"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
+        {/* Row 2: Clean Storage Filters Bar */}
+        {libraries.length > 0 && (
+          <div className="flex items-center gap-2 pt-2 border-t border-steam-border/40 overflow-x-auto pb-1">
+            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium shrink-0 mr-1">
+              <HardDrive className="w-3.5 h-3.5 text-steam-accent" />
+              <span>Накопители:</span>
             </div>
-          )}
-        </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedLibraryPath(null)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                selectedLibraryPath === null
+                  ? 'bg-steam-blue text-white border-steam-blue shadow-sm'
+                  : 'bg-steam-card text-slate-300 border-steam-border hover:text-white hover:border-slate-500'
+              }`}
+              title="Показать игры со всех подключенных накопителей"
+            >
+              <span>Все ({validGamesCount})</span>
+            </button>
+
+            {libraries.map((lib, idx) => {
+              const isSelected = selectedLibraryPath === lib.path || selectedLibraryPath === lib.displayPath;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedLibraryPath(isSelected ? null : lib.path)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-2 ${
+                    isSelected
+                      ? 'bg-steam-blue text-white border-steam-blue shadow-sm'
+                      : 'bg-steam-card text-slate-300 border-steam-border hover:text-white hover:border-steam-accent'
+                  }`}
+                  title={`Показать только игры из ${lib.displayPath}`}
+                >
+                  <span className="font-mono text-[11px] truncate max-w-[260px]">{lib.displayPath}</span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-steam-accent/20 text-steam-accent'
+                    }`}
+                  >
+                    {lib.gamesCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Tabs navigation */}
@@ -745,15 +758,17 @@ export const SteamLibrary: React.FC = () => {
 
                   {/* Actions Footer */}
                   <div className="p-3 bg-steam-nav/60 border-t border-steam-border/60 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/files?path=${encodeURIComponent(game.displayPath)}`)}
-                      className="flex-1 py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-steam-cardHover text-slate-200 border border-steam-border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      title="Открыть каталог игры в файловом менеджере"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5 text-steam-cyan" />
-                      <span>Папка игры</span>
-                    </button>
+                    {user?.role === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/files?path=${encodeURIComponent(game.displayPath)}`)}
+                        className="py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-steam-cardHover text-slate-300 border border-steam-border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        title="Открыть каталог игры в файловом менеджере (Администратор)"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-steam-cyan" />
+                        <span>Папка</span>
+                      </button>
+                    )}
 
                     {(() => {
                       const alreadyInSteam = isGameInSteam(game);
@@ -761,7 +776,7 @@ export const SteamLibrary: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openSmartModal(game)}
-                          className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                             alreadyInSteam
                               ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30'
                               : 'bg-steam-blue hover:bg-steam-blueHover text-white shadow-blue-500/20'

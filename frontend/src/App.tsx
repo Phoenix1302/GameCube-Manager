@@ -88,10 +88,8 @@ export const App: React.FC = () => {
             <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/steam" element={<SteamLibrary />} />
 
-            {/* Shared Route: Torrents & File Manager */}
+            {/* Shared Route: Torrents */}
             <Route path="/torrents" element={<Torrents />} />
-            <Route path="/files" element={<AdminFiles />} />
-            <Route path="/admin/files" element={<AdminFiles />} />
 
             {/* Settings Route */}
             <Route path="/settings" element={<Settings />} />
@@ -105,6 +103,15 @@ export const App: React.FC = () => {
                 </AdminRoute>
               }
             />
+            <Route
+              path="/admin/files"
+              element={
+                <AdminRoute>
+                  <AdminFiles />
+                </AdminRoute>
+              }
+            />
+            <Route path="/files" element={<Navigate to="/admin/files" replace />} />
             <Route
               path="/admin/terminal"
               element={

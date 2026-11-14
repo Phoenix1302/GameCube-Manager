@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import axios from 'axios';
 import { pipeline } from 'stream/promises';
 import { settingsQueries } from '../db/index.js';
@@ -421,34 +422,95 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
   };
 }
 
+export interface SteamUserConfigDir {
+  userId: string;
+  userDir: string;
+  configDir: string;
+  gridDir: string;
+  shortcutsFile: string;
+}
+
+export function findAllSteamUserConfigDirs(): SteamUserConfigDir[] {
+  const rawUserdataDir = getSteamUserdataDir();
+  const internalUserdataDir = toInternalPath(rawUserdataDir);
+  if (!fs.existsSync(internalUserdataDir)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(internalUserdataDir, { withFileTypes: true });
+  // Filter numeric directories
+  const numericDirs = entries.filter((e) => e.isDirectory() && /^\d+$/.test(e.name));
+  // Prefer real user IDs (!== '0')
+  const nonZero = numericDirs.filter((e) => e.name !== '0');
+  const targetDirs = nonZero.length > 0 ? nonZero : numericDirs;
+
+  return targetDirs.map((e) => {
+    const userDir = path.join(internalUserdataDir, e.name);
+    const configDir = path.join(userDir, 'config');
+    const gridDir = path.join(configDir, 'grid');
+    const shortcutsFile = path.join(configDir, 'shortcuts.vdf');
+    return {
+      userId: e.name,
+      userDir,
+      configDir,
+      gridDir,
+      shortcutsFile,
+    };
+  });
+}
+
 /**
- * Finds the first valid Steam user ID directory under Steam userdata
+ * Finds the most active valid Steam user ID directory under Steam userdata
  */
-function findSteamUserConfigDir(): { userDir: string; configDir: string; gridDir: string; shortcutsFile: string } | null {
-  const userdataDir = getSteamUserdataDir();
-  if (!fs.existsSync(userdataDir)) {
+function findSteamUserConfigDir(): SteamUserConfigDir | null {
+  const allDirs = findAllSteamUserConfigDirs();
+  if (allDirs.length === 0) {
     return null;
   }
 
-  const entries = fs.readdirSync(userdataDir, { withFileTypes: true });
-  const userDirs = entries.filter((e) => e.isDirectory() && /^\d+$/.test(e.name));
+  // Sort by most recently modified localconfig.vdf or user directory
+  allDirs.sort((a, b) => {
+    let mtimeA = 0;
+    let mtimeB = 0;
+    try {
+      const fA = path.join(a.configDir, 'localconfig.vdf');
+      mtimeA = fs.existsSync(fA) ? fs.statSync(fA).mtimeMs : fs.statSync(a.userDir).mtimeMs;
+    } catch {}
+    try {
+      const fB = path.join(b.configDir, 'localconfig.vdf');
+      mtimeB = fs.existsSync(fB) ? fs.statSync(fB).mtimeMs : fs.statSync(b.userDir).mtimeMs;
+    } catch {}
+    return mtimeB - mtimeA;
+  });
 
-  if (userDirs.length === 0) {
-    return null;
+  return allDirs[0];
+}
+
+function applyCompatToolMapping(appId: number, toolName: string) {
+  try {
+    const rawUserdataDir = getSteamUserdataDir();
+    const internalSteamDir = path.dirname(toInternalPath(rawUserdataDir));
+    const configVdfPath = path.join(internalSteamDir, 'config', 'config.vdf');
+
+    if (!fs.existsSync(configVdfPath)) return;
+
+    let content = fs.readFileSync(configVdfPath, 'utf-8');
+    const mappingEntry = `\t\t\t\t\t"${appId}"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"${toolName}"\n\t\t\t\t\t\t"config"\t\t""\n\t\t\t\t\t\t"priority"\t\t"250"\n\t\t\t\t\t}`;
+
+    if (content.includes(`"${appId}"`)) {
+      return;
+    }
+
+    if (content.includes('"CompatToolMapping"')) {
+      content = content.replace(
+        /"CompatToolMapping"\s*\{/,
+        `"CompatToolMapping"\n\t\t\t\t{\n${mappingEntry}`
+      );
+      fs.writeFileSync(configVdfPath, content, 'utf-8');
+    }
+  } catch (err: any) {
+    console.warn('[Steam] Could not apply Proton mapping in config.vdf:', err.message);
   }
-
-  // Use the most recently modified user directory
-  const activeUserDir = path.join(userdataDir, userDirs[0].name);
-  const configDir = path.join(activeUserDir, 'config');
-  const gridDir = path.join(configDir, 'grid');
-  const shortcutsFile = path.join(configDir, 'shortcuts.vdf');
-
-  return {
-    userDir: activeUserDir,
-    configDir,
-    gridDir,
-    shortcutsFile,
-  };
 }
 
 export interface DetectedExecutable {
@@ -604,41 +666,48 @@ export function scanGameExecutables(gameDir: string): {
 }
 
 async function saveArtworkToSteamGrid(
-  gridDir: string,
+  gridDirs: string | string[],
   appId: number,
   type: 'poster' | 'banner' | 'hero' | 'logo',
   sourceUrl: string
 ): Promise<boolean> {
+  const dirs = Array.isArray(gridDirs) ? gridDirs : [gridDirs];
   const shortId = String(appId);
   const longId = ((BigInt(appId) << 32n) | 0x02000000n).toString();
 
-  let suffix = '';
+  let baseSuffix = '';
   switch (type) {
     case 'poster':
-      suffix = 'p.png';
+      baseSuffix = 'p';
       break;
     case 'banner':
-      suffix = '.png';
+      baseSuffix = '';
       break;
     case 'hero':
-      suffix = '_hero.png';
+      baseSuffix = '_hero';
       break;
     case 'logo':
-      suffix = '_logo.png';
+      baseSuffix = '_logo';
       break;
   }
-
-  const primaryFile = path.join(gridDir, `${shortId}${suffix}`);
-  const secondaryFile = path.join(gridDir, `${longId}${suffix}`);
 
   try {
     const res = await axios.get(sourceUrl, { responseType: 'arraybuffer', timeout: 8000 });
     if (res.status === 200 && res.data && res.data.length > 0) {
       const buf = Buffer.from(res.data);
-      fs.writeFileSync(primaryFile, buf);
-      try {
-        fs.writeFileSync(secondaryFile, buf);
-      } catch {}
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) {
+          try {
+            fs.mkdirSync(dir, { recursive: true });
+          } catch {}
+        }
+        for (const ext of ['.png', '.jpg']) {
+          try {
+            fs.writeFileSync(path.join(dir, `${shortId}${baseSuffix}${ext}`), buf);
+            fs.writeFileSync(path.join(dir, `${longId}${baseSuffix}${ext}`), buf);
+          } catch {}
+        }
+      }
       return true;
     }
   } catch (err: any) {
@@ -853,17 +922,9 @@ async function autoCreateShortcut(params: {
     logo?: string;
   };
 }) {
-  const steamPaths = findSteamUserConfigDir();
-  if (!steamPaths) {
+  const allUserDirs = findAllSteamUserConfigDirs();
+  if (allUserDirs.length === 0) {
     throw new Error('Каталог Steam userdata не найден. Укажите путь в Настройках.');
-  }
-
-  // Ensure config & grid directories exist
-  if (!fs.existsSync(steamPaths.configDir)) {
-    fs.mkdirSync(steamPaths.configDir, { recursive: true });
-  }
-  if (!fs.existsSync(steamPaths.gridDir)) {
-    fs.mkdirSync(steamPaths.gridDir, { recursive: true });
   }
 
   // 1. Resolve executable and working directory
@@ -885,31 +946,8 @@ async function autoCreateShortcut(params: {
     cleanStartDir = path.dirname(cleanExe);
   }
 
-  // 2. Read existing shortcuts.vdf
-  let parsed: Record<string, any> = { shortcuts: {} };
-  if (fs.existsSync(steamPaths.shortcutsFile)) {
-    try {
-      const buf = fs.readFileSync(steamPaths.shortcutsFile);
-      parsed = parseBinaryVdf(buf);
-      if (!parsed.shortcuts) parsed.shortcuts = {};
-      fs.copyFileSync(steamPaths.shortcutsFile, `${steamPaths.shortcutsFile}.bak`);
-    } catch (err) {
-      console.warn('[Steam] Could not parse existing shortcuts.vdf, starting fresh');
-    }
-  }
-
   const appId = generateSteamAppId(cleanExe, params.appName);
-
-  // Check if shortcut already exists in shortcuts.vdf
-  let existingKey: string | null = null;
-  for (const [k, v] of Object.entries(parsed.shortcuts)) {
-    if ((v as any).appid === appId || (v as any).AppName === params.appName) {
-      existingKey = k;
-      break;
-    }
-  }
-
-  const targetKey = existingKey || String(Object.keys(parsed.shortcuts).length);
+  const compatTool = params.compatTool || 'GE-Proton9-20';
 
   const newShortcut: SteamShortcut = {
     appid: appId,
@@ -929,13 +967,51 @@ async function autoCreateShortcut(params: {
     LastPlayTime: 0,
     FlatpakAppID: '',
     tags: { '0': 'GameCube' },
-    compat_tool: params.compatTool || 'GE-Proton9-20',
   };
 
-  parsed.shortcuts[targetKey] = newShortcut;
-  fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+  // 2. Write shortcut to EVERY discovered Steam user directory
+  for (const steamPaths of allUserDirs) {
+    try {
+      if (!fs.existsSync(steamPaths.configDir)) {
+        fs.mkdirSync(steamPaths.configDir, { recursive: true });
+      }
+      if (!fs.existsSync(steamPaths.gridDir)) {
+        fs.mkdirSync(steamPaths.gridDir, { recursive: true });
+      }
 
-  // 3. Download and install artwork if requested
+      let parsed: Record<string, any> = { shortcuts: {} };
+      if (fs.existsSync(steamPaths.shortcutsFile)) {
+        try {
+          const buf = fs.readFileSync(steamPaths.shortcutsFile);
+          parsed = parseBinaryVdf(buf);
+          if (!parsed.shortcuts) parsed.shortcuts = {};
+          fs.copyFileSync(steamPaths.shortcutsFile, `${steamPaths.shortcutsFile}.bak`);
+        } catch (err) {
+          console.warn(`[Steam] Could not parse existing shortcuts.vdf for user ${steamPaths.userId}, starting fresh`);
+        }
+      }
+
+      let existingKey: string | null = null;
+      for (const [k, v] of Object.entries(parsed.shortcuts)) {
+        if ((v as any).appid === appId || (v as any).AppName === params.appName) {
+          existingKey = k;
+          break;
+        }
+      }
+
+      const targetKey = existingKey || String(Object.keys(parsed.shortcuts).length);
+      parsed.shortcuts[targetKey] = newShortcut;
+      fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+    } catch (err: any) {
+      console.warn(`[Steam] Failed to write shortcuts.vdf for user ${steamPaths.userId}:`, err.message);
+    }
+  }
+
+  // 3. Apply Proton compatibility mapping in config/config.vdf
+  applyCompatToolMapping(appId, compatTool);
+
+  // 4. Download and install artwork to all user grid directories if requested
+  const allGridDirs = allUserDirs.map((u) => u.gridDir);
   const artworkStatus = {
     poster: false,
     banner: false,
@@ -944,31 +1020,31 @@ async function autoCreateShortcut(params: {
   };
 
   if (params.installArtwork !== false) {
-    // 3.1 First priority: Apply user-selected custom artwork if provided
+    // 4.1 First priority: Apply user-selected custom artwork if provided
     if (params.customArtwork) {
       if (params.customArtwork.poster) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', params.customArtwork.poster)) {
+        if (await saveArtworkToSteamGrid(allGridDirs, appId, 'poster', params.customArtwork.poster)) {
           artworkStatus.poster = true;
         }
       }
       if (params.customArtwork.banner) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', params.customArtwork.banner)) {
+        if (await saveArtworkToSteamGrid(allGridDirs, appId, 'banner', params.customArtwork.banner)) {
           artworkStatus.banner = true;
         }
       }
       if (params.customArtwork.hero) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', params.customArtwork.hero)) {
+        if (await saveArtworkToSteamGrid(allGridDirs, appId, 'hero', params.customArtwork.hero)) {
           artworkStatus.hero = true;
         }
       }
       if (params.customArtwork.logo) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', params.customArtwork.logo)) {
+        if (await saveArtworkToSteamGrid(allGridDirs, appId, 'logo', params.customArtwork.logo)) {
           artworkStatus.logo = true;
         }
       }
     }
 
-    // 3.2 For any artwork slot not chosen manually, try official Steam Store CDN assets
+    // 4.2 For any artwork slot not chosen manually, try official Steam Store CDN assets
     let steamAppId = params.resolvedSteamAppId || resolveAppIdByName(params.appName);
     if (!steamAppId && params.appName && (!artworkStatus.poster || !artworkStatus.banner || !artworkStatus.hero || !artworkStatus.logo)) {
       try {
@@ -991,7 +1067,7 @@ async function autoCreateShortcut(params: {
           `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
         ];
         for (const url of posterCandidates) {
-          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', url)) {
+          if (await saveArtworkToSteamGrid(allGridDirs, appId, 'poster', url)) {
             artworkStatus.poster = true;
             break;
           }
@@ -1005,7 +1081,7 @@ async function autoCreateShortcut(params: {
           `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/header.jpg`,
         ];
         for (const url of bannerCandidates) {
-          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', url)) {
+          if (await saveArtworkToSteamGrid(allGridDirs, appId, 'banner', url)) {
             artworkStatus.banner = true;
             break;
           }
@@ -1019,7 +1095,7 @@ async function autoCreateShortcut(params: {
           `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
         ];
         for (const url of heroCandidates) {
-          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', url)) {
+          if (await saveArtworkToSteamGrid(allGridDirs, appId, 'hero', url)) {
             artworkStatus.hero = true;
             break;
           }
@@ -1032,7 +1108,7 @@ async function autoCreateShortcut(params: {
           `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
         ];
         for (const url of logoCandidates) {
-          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', url)) {
+          if (await saveArtworkToSteamGrid(allGridDirs, appId, 'logo', url)) {
             artworkStatus.logo = true;
             break;
           }
@@ -1068,7 +1144,7 @@ async function autoCreateShortcut(params: {
                 { headers, timeout: 5000 }
               );
               const imgUrl = gridsRes.data?.data?.[0]?.url;
-              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', imgUrl))) {
+              if (imgUrl && (await saveArtworkToSteamGrid(allGridDirs, appId, 'poster', imgUrl))) {
                 artworkStatus.poster = true;
               }
             } catch {}
@@ -1081,7 +1157,7 @@ async function autoCreateShortcut(params: {
                 { headers, timeout: 5000 }
               );
               const imgUrl = bannersRes.data?.data?.[0]?.url;
-              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', imgUrl))) {
+              if (imgUrl && (await saveArtworkToSteamGrid(allGridDirs, appId, 'banner', imgUrl))) {
                 artworkStatus.banner = true;
               }
             } catch {}
@@ -1094,7 +1170,7 @@ async function autoCreateShortcut(params: {
                 timeout: 5000,
               });
               const imgUrl = heroesRes.data?.data?.[0]?.url;
-              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', imgUrl))) {
+              if (imgUrl && (await saveArtworkToSteamGrid(allGridDirs, appId, 'hero', imgUrl))) {
                 artworkStatus.hero = true;
               }
             } catch {}
@@ -1107,7 +1183,7 @@ async function autoCreateShortcut(params: {
                 timeout: 5000,
               });
               const imgUrl = logosRes.data?.data?.[0]?.url;
-              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', imgUrl))) {
+              if (imgUrl && (await saveArtworkToSteamGrid(allGridDirs, appId, 'logo', imgUrl))) {
                 artworkStatus.logo = true;
               }
             } catch {}
@@ -1123,7 +1199,7 @@ async function autoCreateShortcut(params: {
     appName: params.appName,
     exe: cleanExe,
     startDir: cleanStartDir,
-    compatTool: newShortcut.compat_tool,
+    compatTool,
     artwork: artworkStatus,
     message: `Ярлык «${params.appName}» и все обложки успешно добавлены в Steam!`,
   };
@@ -1377,42 +1453,98 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Delete shortcut from shortcuts.vdf
+  // Delete shortcut from shortcuts.vdf across all user directories
   fastify.delete('/shortcuts/:appId', async (request, reply) => {
     const { appId } = request.params as { appId: string };
     const targetId = parseInt(appId, 10);
-    const steamPaths = findSteamUserConfigDir();
-    if (!steamPaths || !fs.existsSync(steamPaths.shortcutsFile)) {
-      return reply.status(404).send({ error: 'shortcuts.vdf not found' });
+    const allUserDirs = findAllSteamUserConfigDirs();
+    if (allUserDirs.length === 0) {
+      return reply.status(404).send({ error: 'Каталоги пользователей Steam не найдены' });
+    }
+
+    let deletedAny = false;
+    for (const steamPaths of allUserDirs) {
+      if (!fs.existsSync(steamPaths.shortcutsFile)) continue;
+      try {
+        const buf = fs.readFileSync(steamPaths.shortcutsFile);
+        const parsed = parseBinaryVdf(buf);
+        const rawShortcuts = parsed.shortcuts || {};
+
+        let found = false;
+        const newShortcuts: Record<string, any> = {};
+        let newIdx = 0;
+
+        for (const [k, v] of Object.entries(rawShortcuts)) {
+          if ((v as any).appid === targetId) {
+            found = true;
+            deletedAny = true;
+            continue;
+          }
+          newShortcuts[String(newIdx++)] = v;
+        }
+
+        if (found) {
+          parsed.shortcuts = newShortcuts;
+          fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+        }
+
+        // Clean up grid artwork files
+        if (fs.existsSync(steamPaths.gridDir)) {
+          const shortId = String(targetId);
+          const longId = ((BigInt(targetId) << 32n) | 0x02000000n).toString();
+          const gridFiles = fs.readdirSync(steamPaths.gridDir);
+          for (const gf of gridFiles) {
+            if (gf.startsWith(shortId) || gf.startsWith(longId)) {
+              try {
+                fs.unlinkSync(path.join(steamPaths.gridDir, gf));
+              } catch {}
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Steam] Error removing shortcut from ${steamPaths.shortcutsFile}:`, err.message);
+      }
+    }
+
+    if (!deletedAny) {
+      return reply.status(404).send({ error: 'Ярлык не найден в shortcuts.vdf' });
+    }
+
+    return { message: 'Ярлык и обложки успешно удалены из Steam', appId: targetId };
+  });
+
+  // Restart Steam client on host to reload shortcuts and artworks in Game Mode
+  fastify.post('/restart-steam', async (request, reply) => {
+    if (config.isWindows) {
+      return { success: true, message: 'Windows: перезапустите Steam вручную для применения изменений' };
     }
 
     try {
-      const buf = fs.readFileSync(steamPaths.shortcutsFile);
-      const parsed = parseBinaryVdf(buf);
-      const rawShortcuts = parsed.shortcuts || {};
-
-      let found = false;
-      const newShortcuts: Record<string, any> = {};
-      let newIdx = 0;
-
-      for (const [k, v] of Object.entries(rawShortcuts)) {
-        if ((v as any).appid === targetId) {
-          found = true;
-          continue;
-        }
-        newShortcuts[String(newIdx++)] = v;
+      if (fs.existsSync('/host_root/usr/bin/pkill') || fs.existsSync('/host_root/bin/pkill')) {
+        try {
+          execSync('chroot /host_root pkill -HUP steam || chroot /host_root pkill -15 steam || true', {
+            timeout: 4000,
+            stdio: 'ignore',
+          });
+        } catch {}
       }
 
-      if (!found) {
-        return reply.status(404).send({ error: 'Shortcut not found in shortcuts.vdf' });
-      }
+      try {
+        execSync('pkill -HUP steam || pkill -15 steam || true', {
+          timeout: 2000,
+          stdio: 'ignore',
+        });
+      } catch {}
 
-      parsed.shortcuts = newShortcuts;
-      fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
-
-      return { message: 'Ярлык успешно удален из Steam', appId: targetId };
+      return {
+        success: true,
+        message: 'Команда перезапуска Steam отправлена. Если запущен Game Mode, интерфейс обновится автоматически.',
+      };
     } catch (err: any) {
-      return reply.status(500).send({ error: `Failed to remove shortcut: ${err.message}` });
+      return reply.status(500).send({
+        error: 'Не удалось отправить команду перезапуска',
+        details: err.message,
+      });
     }
   });
 

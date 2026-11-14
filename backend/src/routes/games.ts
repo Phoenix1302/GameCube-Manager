@@ -223,6 +223,10 @@ export async function gamesRoutes(fastify: FastifyInstance) {
         const discountPercent = discountMatch ? parseInt(discountMatch[1], 10) : 0;
         const releaseDate = releaseMatch ? releaseMatch[1].trim() : '';
 
+        if (id && rawImg && rawImg.startsWith('http')) {
+          gameCacheQueries.upsertImages(id, name, rawImg, null, null);
+        }
+
         items.push({
           id,
           name,

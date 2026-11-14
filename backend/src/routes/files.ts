@@ -4,7 +4,7 @@ import path from 'path';
 import { pipeline } from 'stream/promises';
 import { config } from '../config.js';
 import { settingsQueries } from '../db/index.js';
-import { authenticate } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 function getHostRoot(): string {
   return settingsQueries.get('host_root', config.hostRoot);
@@ -46,8 +46,8 @@ function resolveFullPath(relOrAbsPath: string): string {
 }
 
 export async function filesRoutes(fastify: FastifyInstance) {
-  // File operations require authenticated user
-  fastify.addHook('preHandler', authenticate);
+  // File operations require Admin privileges
+  fastify.addHook('preHandler', requireAdmin);
 
   // List directory contents
   fastify.get('/list', async (request, reply) => {

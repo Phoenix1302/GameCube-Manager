@@ -22,13 +22,12 @@ export const Navbar: React.FC = () => {
   const { isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Navigation for regular users (Gaming suite)
+  // Navigation for regular users (Gaming suite only - NO file manager)
   const userNavItems = [
     { name: 'Игры', path: '/', icon: Gamepad },
     { name: 'Торренты', path: '/torrents', icon: DownloadCloud },
     { name: 'Wishlist', path: '/wishlist', icon: Heart },
     { name: 'Steam Library', path: '/steam', icon: FolderSync },
-    { name: 'Файлы', path: '/files', icon: FolderTree },
     { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
