@@ -42,15 +42,12 @@ const GameImage: React.FC<{ src: string; alt: string; appId: number }> = ({ src,
   const handleError = () => {
     if (attempt === 0) {
       setAttempt(1);
-      setCurrentSrc(`/api/games/image/${appId}/header`);
+      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
     } else if (attempt === 1) {
       setAttempt(2);
-      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
+      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
     } else if (attempt === 2) {
       setAttempt(3);
-      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
-    } else if (attempt === 3) {
-      setAttempt(4);
       setCurrentSrc(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`);
     } else {
       setHasError(true);

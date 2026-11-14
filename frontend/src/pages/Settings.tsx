@@ -213,11 +213,16 @@ export const Settings: React.FC = () => {
             <SettingsIcon className="w-7 h-7 text-steam-accent" />
             {isAdmin ? 'Системные настройки' : 'Личные настройки пользователя'}
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {isAdmin
-              ? 'Конфигурация интеграций с qBittorrent, SteamGridDB API и путей к библиотеке Steam.'
-              : 'Персональная настройка сессии RuTracker и способов добавления раздач в торрент-клиент.'}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30">
+              v1.0.1
+            </span>
+            <span className="text-sm text-slate-400">
+              {isAdmin
+                ? 'Конфигурация интеграций с qBittorrent, SteamGridDB API и путей к библиотеке Steam.'
+                : 'Персональная настройка сессии RuTracker и способов добавления раздач в торрент-клиент.'}
+            </span>
+          </div>
         </div>
 
         {saveSuccess && (

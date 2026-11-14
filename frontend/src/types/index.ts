@@ -13,6 +13,7 @@ export interface User {
   role: 'admin' | 'user';
   avatar: AvatarInfo;
   createdAt?: string;
+  created_at?: string;
 }
 
 export interface Game {

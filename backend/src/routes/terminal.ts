@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { spawn } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 import { config } from '../config.js';
 import { settingsQueries } from '../db/index.js';
 
@@ -18,6 +19,30 @@ async function getNodePty() {
   return nodePty;
 }
 
+function detectHostUser(): { username: string; userHome: string } {
+  // Check common gaming / host usernames on Linux
+  const candidates = ['gamecube', 'bazzite', 'deck', 'steam', 'fedora'];
+  for (const c of candidates) {
+    if (fs.existsSync(`/host_root/home/${c}`)) {
+      return { username: c, userHome: `/home/${c}` };
+    }
+  }
+
+  // Check /host_root/home for any user directory
+  if (fs.existsSync('/host_root/home')) {
+    try {
+      const entries = fs.readdirSync('/host_root/home');
+      for (const entry of entries) {
+        if (!entry.startsWith('.') && fs.statSync(`/host_root/home/${entry}`).isDirectory()) {
+          return { username: entry, userHome: `/home/${entry}` };
+        }
+      }
+    } catch {}
+  }
+
+  return { username: 'root', userHome: '/root' };
+}
+
 function getShellExecution(): { file: string; args: string[]; cwd: string; env: Record<string, string> } {
   if (config.isWindows) {
     return {
@@ -29,22 +54,39 @@ function getShellExecution(): { file: string; args: string[]; cwd: string; env: 
   }
 
   // If running inside container with host root mounted at /host_root:
-  // Use chroot to escape into host system so htop, systemctl, dnf, etc. work natively
+  // Use chroot to escape into host system as the real host user (e.g. gamecube)
   if (
     fs.existsSync('/host_root') &&
     (fs.existsSync('/host_root/bin/bash') || fs.existsSync('/host_root/usr/bin/bash'))
   ) {
+    const { username, userHome } = detectHostUser();
+    const hostUserHome = path.join('/host_root', userHome);
+    const bashrcPath = path.join(hostUserHome, '.bashrc');
+
+    // Launch interactive non-login shell with user's .bashrc.
+    // Avoid -l / --login because Fedora's /etc/profile runs ttyname (which fails inside chroot)
+    // and attempts to access /root/.bash_profile (which is inaccessible to rootless host user 1000).
+    const args = ['/host_root', '/bin/bash'];
+    if (fs.existsSync(bashrcPath)) {
+      args.push('--rcfile', `${userHome}/.bashrc`);
+    }
+    args.push('-i');
+
     return {
       file: 'chroot',
-      args: ['/host_root', '/bin/bash', '-l'],
-      cwd: '/',
+      args,
+      cwd: fs.existsSync(hostUserHome) ? hostUserHome : '/host_root',
       env: {
         ...(process.env as Record<string, string>),
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
-        PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-        HOME: '/root',
+        PATH: '/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin',
+        HOME: userHome,
+        USER: username,
+        LOGNAME: username,
         SHELL: '/bin/bash',
+        PWD: userHome,
+        MESG: 'n',
       },
     };
   }
@@ -52,7 +94,7 @@ function getShellExecution(): { file: string; args: string[]; cwd: string; env: 
   const fallbackShell = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
   return {
     file: fallbackShell,
-    args: ['-l'],
+    args: ['-i'],
     cwd: fs.existsSync('/host_root') ? '/host_root' : '/',
     env: {
       ...(process.env as Record<string, string>),

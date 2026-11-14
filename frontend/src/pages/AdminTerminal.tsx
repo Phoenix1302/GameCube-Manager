@@ -95,7 +95,7 @@ export const AdminTerminal: React.FC = () => {
     ws.onopen = () => {
       setConnected(true);
       term.writeln('\x1b[1;36m🎮 Подключение к хост-системе GameCube-Manager установлено.\x1b[0m');
-      term.writeln('\x1b[90mПрямой интерактивный доступ к хосту через chroot (/host_root)\x1b[0m\r\n');
+      term.writeln('\x1b[90mИнтерактивный доступ к хост-системе (~/home/gamecube)\x1b[0m\r\n');
 
       fitAddon.fit();
       const dims = fitAddon.proposeDimensions();
@@ -199,8 +199,9 @@ export const AdminTerminal: React.FC = () => {
         </span>
         {[
           { label: 'htop', cmd: 'htop' },
+          { label: 'ls -la ~', cmd: 'ls -la ~' },
           { label: 'ls -la /mnt/game_data', cmd: 'ls -la /mnt/game_data' },
-          { label: 'systemctl status', cmd: 'systemctl status' },
+          { label: 'systemctl --user status', cmd: 'systemctl --user status' },
           { label: 'uname -a', cmd: 'uname -a' },
           { label: 'df -h', cmd: 'df -h' },
           { label: 'clear', cmd: 'clear' },

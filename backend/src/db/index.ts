@@ -163,6 +163,15 @@ export function initDb() {
     insertSettingStmt.run(key, value);
   }
 
+  // Ensure all existing users have a valid created_at timestamp
+  try {
+    db.exec(`
+      UPDATE users 
+      SET created_at = datetime('now') 
+      WHERE created_at IS NULL OR created_at = '' OR created_at = '—';
+    `);
+  } catch {}
+
   // Check if system has been initialized with an administrator
   if (isSystemInitialized()) {
     console.log('[DB] System is initialized. Administrator account exists.');
@@ -204,6 +213,10 @@ export const userQueries = {
   },
   updatePassword: (id: number, passwordHash: string): boolean => {
     const result = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+    return result.changes > 0;
+  },
+  updateRole: (id: number, role: 'admin' | 'user'): boolean => {
+    const result = db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
     return result.changes > 0;
   },
   delete: (id: number): boolean => {

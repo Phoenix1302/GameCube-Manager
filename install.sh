@@ -142,8 +142,8 @@ podman build -t localhost/gamecube-manager:1.0.1 .
 echo -e "    - Building ${BOLD}gamecube-torrent:1.0.1${NC} (Headless qBittorrent)..."
 podman build -t localhost/gamecube-torrent:1.0.1 deploy/qbittorrent
 
-echo -e "    - Building ${BOLD}gamecube-proxy:1.0.0${NC} (Nginx SSL Reverse Proxy)..."
-podman build -t localhost/gamecube-proxy:1.0.0 deploy/nginx
+echo -e "    - Building ${BOLD}gamecube-proxy:1.0.1${NC} (Nginx SSL Reverse Proxy)..."
+podman build -t localhost/gamecube-proxy:1.0.1 deploy/nginx
 
 echo -e "    ${GREEN}✔${NC} All container images built successfully."
 
@@ -233,7 +233,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-proxy
 Pod=gamecube.pod
-Image=localhost/gamecube-proxy:1.0.0
+Image=localhost/gamecube-proxy:1.0.1
 Volume=gamecube-certs:/etc/nginx/certs:rw
 
 [Service]

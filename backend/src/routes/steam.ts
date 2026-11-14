@@ -6,6 +6,7 @@ import { pipeline } from 'stream/promises';
 import { settingsQueries } from '../db/index.js';
 import { config } from '../config.js';
 import { authenticate } from '../middleware/auth.js';
+import { getOrCacheGameImage } from '../services/imageCache.js';
 import {
   parseBinaryVdf,
   serializeBinaryVdf,
@@ -284,6 +285,9 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
                 if (!seenGameKeys.has(uniqueKey)) {
                   seenGameKeys.add(uniqueKey);
                   libGameCount++;
+                  if (appId) {
+                    getOrCacheGameImage(appId, 'header').catch(() => {});
+                  }
                   allGames.push({
                     appId,
                     name: name || installDir,
@@ -292,7 +296,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
                     displayPath: toCleanPath(gameFullPath),
                     sizeBytes,
                     sizeFormatted: formatBytes(sizeBytes),
-                    headerImage: appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '',
+                    headerImage: appId ? `/api/games/image/${appId}/header` : '',
                     isOfficialSteam: true,
                     libraryPath: libDir,
                     libraryDisplayPath: toCleanPath(libDir),
@@ -328,6 +332,9 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
                 seenGameKeys.add(uniqueKey);
                 const gameFullPath = path.join(commonDir, folderName);
                 libGameCount++;
+                if (resolvedAppId) {
+                  getOrCacheGameImage(resolvedAppId, 'header').catch(() => {});
+                }
 
                 allGames.push({
                   appId: resolvedAppId,
@@ -337,7 +344,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
                   displayPath: toCleanPath(gameFullPath),
                   sizeBytes: 0,
                   sizeFormatted: 'Локальная папка',
-                  headerImage: resolvedAppId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${resolvedAppId}/header.jpg` : '',
+                  headerImage: resolvedAppId ? `/api/games/image/${resolvedAppId}/header` : '',
                   isOfficialSteam: false,
                   libraryPath: libDir,
                   libraryDisplayPath: toCleanPath(libDir),

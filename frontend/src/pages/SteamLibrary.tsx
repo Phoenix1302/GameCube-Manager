@@ -386,14 +386,27 @@ export const SteamLibrary: React.FC = () => {
                     {/* Header Image */}
                     <div className="aspect-[460/215] bg-slate-900 relative overflow-hidden">
                       {game.headerImage ? (
-                        <img
-                          src={game.headerImage}
-                          alt={game.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLElement).style.display = 'none';
-                          }}
-                        />
+                        <>
+                          <img
+                            src={game.headerImage}
+                            alt={game.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                              const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                              if (placeholder) placeholder.style.display = 'flex';
+                            }}
+                          />
+                          <div
+                            style={{ display: 'none' }}
+                            className="w-full h-full flex-col items-center justify-center bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-800 text-slate-400 p-4 text-center"
+                          >
+                            <Gamepad2 className="w-10 h-10 mb-2 text-steam-accent" />
+                            <span className="text-xs font-bold text-white line-clamp-2 px-2">
+                              {game.name}
+                            </span>
+                          </div>
+                        </>
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-800 text-slate-400 p-4 text-center">
                           <Gamepad2 className="w-10 h-10 mb-2 text-steam-accent" />

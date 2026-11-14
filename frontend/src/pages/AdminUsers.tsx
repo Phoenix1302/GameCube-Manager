@@ -115,6 +115,28 @@ export const AdminUsers: React.FC = () => {
     }
   };
 
+  const handleToggleRole = async (target: User) => {
+    const newRole = target.role === 'admin' ? 'user' : 'admin';
+    const confirmMsg =
+      target.role === 'admin'
+        ? `Понизить пользователя «${target.username}» до обычного пользователя?`
+        : `Назначить пользователя «${target.username}» администратором?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.put(`/users/${target.id}/role`, { role: newRole });
+      setFeedback({
+        type: 'success',
+        text: `Роль пользователя «${target.username}» изменена на ${
+          newRole === 'admin' ? 'Администратор' : 'Пользователь'
+        }`,
+      });
+      loadUsers();
+    } catch (err: any) {
+      alert(`Ошибка изменения роли: ${err.response?.data?.message || err.message}`);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -169,6 +191,14 @@ export const AdminUsers: React.FC = () => {
               gradient: 'linear-gradient(135deg, #1a9fff, #00d8d8)',
             };
             const isCurrent = currentUser?.id === u.id;
+            const regDate = u.createdAt || (u as any).created_at;
+            const formattedDate = regDate
+              ? new Date(regDate).toLocaleDateString('ru-RU', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                })
+              : 'Недавно';
 
             return (
               <div
@@ -193,23 +223,30 @@ export const AdminUsers: React.FC = () => {
                         )}
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}
+                        {formattedDate}
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    {u.role === 'admin' ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase tracking-wider">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Admin
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                        <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                        User
-                      </span>
-                    )}
+                    <button
+                      onClick={() => handleToggleRole(u)}
+                      disabled={isCurrent && u.role === 'admin'}
+                      title={isCurrent ? 'Нельзя изменить свою роль' : 'Нажмите для изменения роли'}
+                      className="cursor-pointer transition-transform active:scale-95"
+                    >
+                      {u.role === 'admin' ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase tracking-wider">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                          User
+                        </span>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -266,6 +303,14 @@ export const AdminUsers: React.FC = () => {
                     gradient: 'linear-gradient(135deg, #1a9fff, #00d8d8)',
                   };
                   const isCurrent = currentUser?.id === u.id;
+                  const regDate = u.createdAt || (u as any).created_at;
+                  const formattedDate = regDate
+                    ? new Date(regDate).toLocaleDateString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })
+                    : 'Недавно';
 
                   return (
                     <tr key={u.id} className="hover:bg-steam-cardHover/50 transition-colors">
@@ -288,20 +333,27 @@ export const AdminUsers: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
-                        {u.role === 'admin' ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase tracking-wider">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            Admin
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                            User
-                          </span>
-                        )}
+                        <button
+                          onClick={() => handleToggleRole(u)}
+                          disabled={isCurrent && u.role === 'admin'}
+                          title={isCurrent ? 'Нельзя изменить свою роль' : 'Нажмите для изменения роли'}
+                          className="group/role cursor-pointer transition-transform active:scale-95 text-left"
+                        >
+                          {u.role === 'admin' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase tracking-wider group-hover/role:border-steam-cyan transition-colors">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              Admin
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 group-hover/role:border-slate-500 transition-colors">
+                              <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                              User
+                            </span>
+                          )}
+                        </button>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap text-xs text-slate-400">
-                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ru-RU') : '—'}
+                        {formattedDate}
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">

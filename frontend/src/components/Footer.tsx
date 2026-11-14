@@ -12,7 +12,7 @@ export const Footer: React.FC = () => {
           </div>
           <span className="font-bold text-slate-200">GameCube Manager</span>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30">
-            v1.0.0
+            v1.0.1
           </span>
         </div>
 

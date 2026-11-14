@@ -13,6 +13,7 @@ export async function usersRoutes(fastify: FastifyInstance) {
     const rawUsers = userQueries.list();
     const users = rawUsers.map((u) => ({
       ...u,
+      createdAt: u.created_at || new Date().toISOString(),
       avatar: getAvatarData(u.username),
     }));
     return { users };
@@ -110,6 +111,53 @@ export async function usersRoutes(fastify: FastifyInstance) {
     userQueries.updatePassword(userId, newHash);
 
     return { message: 'Password updated successfully' };
+  });
+
+  // Change user role (admin <-> user)
+  fastify.put('/:id/role', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { role } = request.body as { role?: 'admin' | 'user' };
+
+    const userId = parseInt(id, 10);
+    if (isNaN(userId)) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Некорректный ID пользователя',
+      });
+    }
+
+    if (role !== 'admin' && role !== 'user') {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Недопустимая роль. Допустимы: admin, user',
+      });
+    }
+
+    const user = userQueries.getById(userId);
+    if (!user) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Пользователь не найден',
+      });
+    }
+
+    // Safety: prevent demoting yourself if you are the last admin
+    if (user.role === 'admin' && role === 'user') {
+      const adminCount = userQueries.countAdmins();
+      if (adminCount <= 1) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Нельзя отозвать права у единственного администратора системы',
+        });
+      }
+    }
+
+    userQueries.updateRole(userId, role);
+    return { message: `Роль пользователя ${user.username} успешно обновлена` };
   });
 
   // Delete user

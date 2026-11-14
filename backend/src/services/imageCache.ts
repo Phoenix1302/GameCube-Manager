@@ -31,12 +31,18 @@ export function getSteamCdnUrls(appId: number, type: ImageType): string[] {
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
         `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+        `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
+        `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
       ];
     case 'capsule':
       return [
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
         `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
         `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
       ];
     case 'hero':
       return [
@@ -128,6 +134,60 @@ export async function getOrCacheGameImage(appId: number, type: ImageType = 'head
     } catch {
       // Try next CDN candidate
       continue;
+    }
+  }
+
+  // 3. Fallback: SteamGridDB if API key is configured
+  const sgdbApiKey = settingsQueries.get('steamgriddb_api_key', config.steamGridDbApiKey);
+  if (sgdbApiKey) {
+    try {
+      const sgdbEndpoint =
+        type === 'hero'
+          ? `https://www.steamgriddb.com/api/v2/heroes/steam/${appId}`
+          : `https://www.steamgriddb.com/api/v2/grids/steam/${appId}`;
+
+      const sgdbRes = await axios.get(sgdbEndpoint, {
+        headers: { Authorization: `Bearer ${sgdbApiKey}` },
+        timeout: 5000,
+      });
+
+      const firstImage = sgdbRes.data?.data?.[0];
+      const imageUrl = firstImage?.url || firstImage?.thumb;
+
+      if (imageUrl) {
+        const response = await axios.get(imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 6000,
+        });
+
+        if (response.status === 200 && response.data && response.data.length > 0) {
+          const buffer = Buffer.from(response.data);
+          const contentType = (response.headers['content-type'] as string) || 'image/jpeg';
+
+          const tempPath = `${filePath}.tmp.${Date.now()}`;
+          fs.writeFileSync(tempPath, buffer);
+          fs.renameSync(tempPath, filePath);
+
+          imageCacheQueries.set(
+            cacheKey,
+            appId,
+            type,
+            imageUrl,
+            filePath,
+            contentType,
+            buffer.length
+          );
+
+          return {
+            stream: fs.createReadStream(filePath),
+            contentType,
+            hit: false,
+            contentLength: buffer.length,
+          };
+        }
+      }
+    } catch {
+      // Ignore SteamGridDB lookup error
     }
   }
 

@@ -203,7 +203,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
 
         const imgMatch = b.match(/<img[^>]+src="([^"]+)"/);
         const rawImg = imgMatch ? imgMatch[1].trim() : '';
-        const headerImage = rawImg || `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/capsule_231x87.jpg`;
+        const headerImage = `/api/games/image/${id}/header`;
 
         const priceMatch = b.match(/class="[^"]*discount_final_price[^"]*"[^>]*>([^<]+)<\/div>/);
         const origMatch = b.match(/class="[^"]*discount_original_price[^"]*"[^>]*>([^<]+)<\/div>/);
@@ -251,7 +251,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
             name: it.name,
             discountPercent: it.discount_percent || 0,
             priceText: it.final_price ? `${it.final_price / 100} KZT` : (it.is_free ? 'Бесплатно' : 'В магазине Steam'),
-            headerImage: it.header_image || it.large_capsule_image || it.small_capsule_image || `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${it.id}/capsule_231x87.jpg`,
+            headerImage: `/api/games/image/${it.id}/header`,
             isFree: Boolean(it.is_free),
           });
         }
@@ -328,7 +328,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
       const formatItem = (item: any) => ({
         id: item.id,
         name: item.name,
-        headerImage: item.header_image || item.large_capsule_image || `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${item.id}/header.jpg`,
+        headerImage: `/api/games/image/${item.id}/header`,
         discountPercent: item.discount_percent || 0,
         originalPrice: item.original_price ? item.original_price / 100 : null,
         finalPrice: item.final_price ? item.final_price / 100 : (item.is_free ? 0 : null),
@@ -419,7 +419,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
             }
           : null,
         tinyImage: item.tiny_image,
-        headerImage: `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${item.id}/header.jpg`,
+        headerImage: `/api/games/image/${item.id}/header`,
       }));
 
       const result = { items };
@@ -715,7 +715,7 @@ export async function gamesRoutes(fastify: FastifyInstance) {
         appId: mainData.steam_appid,
         name: mainData.name,
         shortDescription: mainData.short_description,
-        headerImage: mainData.header_image,
+        headerImage: `/api/games/image/${mainData.steam_appid}/header`,
         website: mainData.website,
         developers: mainData.developers || [],
         publishers: mainData.publishers || [],
