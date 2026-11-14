@@ -42,15 +42,24 @@ const GameImage: React.FC<{ src: string; alt: string; appId: number }> = ({ src,
   const handleError = () => {
     if (attempt === 0) {
       setAttempt(1);
-      // Fallback 1: Wide capsule 616x353 (exact same aspect ratio)
-      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
+      // If current URL was corrupted to a hashed header.jpg, restore it to capsule_231x87.jpg
+      if (currentSrc.includes('/header.jpg') && /[a-f0-9]{32,40}/.test(currentSrc)) {
+        setCurrentSrc(currentSrc.replace(/\/header\.jpg(\?.*)?$/, '/capsule_231x87.jpg$1'));
+        return;
+      }
+      // Fallback 1: Fastly root header
+      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
     } else if (attempt === 1) {
       setAttempt(2);
-      // Fallback 2: Akamai CDN header
-      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
+      // Fallback 2: Wide capsule 616x353 (exact same aspect ratio)
+      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
     } else if (attempt === 2) {
       setAttempt(3);
-      // Fallback 3: Cloudflare CDN header
+      // Fallback 3: Akamai CDN header
+      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
+    } else if (attempt === 3) {
+      setAttempt(4);
+      // Fallback 4: Cloudflare CDN header
       setCurrentSrc(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`);
     } else {
       // Direct placeholder - NEVER use portrait 600x900 or tiny 120x45!

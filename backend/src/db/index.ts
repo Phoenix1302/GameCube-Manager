@@ -123,6 +123,9 @@ export function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_browse_cache_expires ON browse_cache(expires_at);
 
+    -- Clear stale or corrupted browse cache on startup so fresh direct CDN URLs are fetched
+    DELETE FROM browse_cache;
+
     CREATE TABLE IF NOT EXISTS image_cache (
       cache_key TEXT PRIMARY KEY,
       app_id INTEGER,

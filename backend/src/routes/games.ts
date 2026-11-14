@@ -78,11 +78,9 @@ const JUNK_AND_ADULT_KEYWORDS = [
 
 export function getDirectSteamHeaderUrl(appId: number, rawImg?: string | null): string {
   if (rawImg && rawImg.startsWith('http')) {
-    // If rawImg is a low-res capsule_sm_120.jpg or capsule_231x87.jpg, upgrade to full header.jpg
-    if (rawImg.includes('capsule_sm_120.jpg') || rawImg.includes('capsule_231x87.jpg')) {
-      return rawImg.replace(/capsule_sm_120\.jpg|capsule_231x87\.jpg/, 'header.jpg');
-    }
-    // Avoid vertical portrait artwork (library_600x900)
+    // If rawImg is already a valid Steam CDN URL (including capsule_231x87, header, capsule_616x353),
+    // NEVER mutate hashed paths (/store_item_assets/steam/apps/<id>/<hash>/...) because Steam content hashes
+    // are file-specific. Mutating capsule_231x87 to header.jpg inside a hash folder results in a 404!
     if (!rawImg.includes('library_600x900') && !rawImg.includes('portrait')) {
       return rawImg;
     }
@@ -140,6 +138,13 @@ export async function gamesRoutes(fastify: FastifyInstance) {
     // 2. Check L2 SQLite Cache
     const l2Hit = gameCacheQueries.getBrowse(cacheKey);
     if (l2Hit) {
+      if (Array.isArray(l2Hit.items)) {
+        for (const it of l2Hit.items) {
+          if (it.headerImage && it.headerImage.includes('/header.jpg') && /[a-f0-9]{32,40}/.test(it.headerImage)) {
+            it.headerImage = it.headerImage.replace(/\/header\.jpg(\?.*)?$/, '/capsule_231x87.jpg$1');
+          }
+        }
+      }
       l1BrowseCache.set(cacheKey, { data: l2Hit, expiresAt: Date.now() + 5 * 60 * 1000 });
       reply.header('X-Cache', 'HIT-SQLITE');
       reply.header('Cache-Control', 'public, max-age=300');
