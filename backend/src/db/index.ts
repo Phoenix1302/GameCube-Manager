@@ -156,6 +156,7 @@ export function initDb() {
     rutracker_login: '',
     rutracker_password: '',
     rutracker_download_mode: 'magnet',
+    steamos_helper_script: '/usr/local/bin/gamecube-restart-steam',
   };
 
   const insertSettingStmt = db.prepare(`

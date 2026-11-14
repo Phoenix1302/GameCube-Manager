@@ -66,8 +66,63 @@ if command -v firewall-cmd >/dev/null 2>&1 && sudo systemctl is-active --quiet f
     echo -e "    ${GREEN}✔${NC} Ports 80, 443, 6882 (TCP/UDP) opened in firewall."
 fi
 
-# 4. Storage & Directory Setup
-echo -e "\n${BLUE}==>${NC} ${BOLD}4. Detecting storage and configuring paths...${NC}"
+# 4. Seamless SteamOS / Gamescope Session Setup & Helper Script
+echo -e "\n${BLUE}==>${NC} ${BOLD}4. Configuring Seamless SteamOS / Gamescope Session & Restart Helper...${NC}"
+
+# Detect Gamescope session desktop file
+GAMESCOPE_SESS=""
+for sess in \
+    "gamescope-wayland.desktop" \
+    "gamescope-session.desktop" \
+    "steam.desktop" \
+    "steam-wayland.desktop" \
+    "steamos.desktop" \
+    "gamescope.desktop"; do
+    if [ -f "/usr/share/wayland-sessions/${sess}" ] || [ -f "/usr/share/xsessions/${sess}" ]; then
+        GAMESCOPE_SESS="${sess}"
+        break
+    fi
+done
+[ -z "$GAMESCOPE_SESS" ] && GAMESCOPE_SESS="gamescope-wayland.desktop"
+
+# Install helper script to /usr/local/bin/gamecube-restart-steam
+if [ -f "${SCRIPT_DIR}/deploy/scripts/gamecube-restart-steam.sh" ]; then
+    sudo install -m 755 "${SCRIPT_DIR}/deploy/scripts/gamecube-restart-steam.sh" /usr/local/bin/gamecube-restart-steam
+    echo -e "    ${GREEN}✔${NC} Installed helper script: ${CYAN}/usr/local/bin/gamecube-restart-steam${NC}"
+fi
+
+# Configure SDDM autologin with Relogin=true to prevent dropping into greeter on restart
+if [ -d "/etc/sddm.conf.d" ] || command -v sddm >/dev/null 2>&1; then
+    sudo mkdir -p /etc/sddm.conf.d
+    cat << EOF | sudo tee /etc/sddm.conf.d/zz-gamecube-session.conf >/dev/null
+[Autologin]
+User=${CURRENT_USER}
+Session=${GAMESCOPE_SESS}
+Relogin=true
+EOF
+    echo -e "    ${GREEN}✔${NC} Configured SDDM autologin with Relogin=true (${GAMESCOPE_SESS})"
+fi
+
+# Ensure /var/lib/sddm/state.conf points to Gamescope
+if [ -d "/var/lib/sddm" ]; then
+    SESS_PATH="/usr/share/wayland-sessions/${GAMESCOPE_SESS}"
+    [ ! -f "$SESS_PATH" ] && SESS_PATH="/usr/share/xsessions/${GAMESCOPE_SESS}"
+    cat << EOF | sudo tee /var/lib/sddm/state.conf >/dev/null
+[Last]
+Session=${SESS_PATH}
+User=${CURRENT_USER}
+EOF
+    echo -e "    ${GREEN}✔${NC} Configured SDDM Last Session to: ${CYAN}${GAMESCOPE_SESS}${NC}"
+fi
+
+# Passwordless sudo for helper script if invoked via sudo
+if [ -d "/etc/sudoers.d" ]; then
+    echo "${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/local/bin/gamecube-restart-steam" | sudo tee /etc/sudoers.d/99-gamecube-restart >/dev/null
+    sudo chmod 440 /etc/sudoers.d/99-gamecube-restart
+fi
+
+# 5. Storage & Directory Setup
+echo -e "\n${BLUE}==>${NC} ${BOLD}5. Detecting storage and configuring paths...${NC}"
 
 # Detect Steam userdata
 STEAM_USERDATA=""

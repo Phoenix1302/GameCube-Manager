@@ -1304,86 +1304,242 @@ async function autoCreateShortcut(params: {
   };
 }
 
-export function findSteamOsHelperScripts(): string[] {
-  const found: string[] = [];
-  const checked = new Set<string>();
+const GAMECUBE_HELPER_SCRIPT_CONTENT = `#!/usr/bin/env bash
+# ==============================================================================
+# GameCube-Manager - Seamless SteamOS / Gamescope Restart Helper
+# ==============================================================================
+# Performs a soft, seamless restart of Steam inside Gamescope / Game Mode,
+# preventing SDDM or display managers from dropping to the greeter login screen.
+# ==============================================================================
 
+set -uo pipefail
+
+echo "[GameCube-Helper] Starting seamless Steam / Gamescope session reload..."
+
+# 1. Determine active non-root desktop user
+ACTIVE_USER="\${SUDO_USER:-}"
+if [ -z "$ACTIVE_USER" ] || [ "$ACTIVE_USER" = "root" ]; then
+    ACTIVE_USER=$(who 2>/dev/null | awk '{print $1}' | head -n1 || true)
+fi
+
+if [ -z "$ACTIVE_USER" ] || [ "$ACTIVE_USER" = "root" ]; then
+    if [ -d "/run/user" ]; then
+        for u in /run/user/[0-9]*; do
+            if [ -d "$u" ]; then
+                uid_num=$(basename "$u")
+                uid_name=$(id -nu "$uid_num" 2>/dev/null || true)
+                if [ -n "$uid_name" ] && [ "$uid_name" != "root" ]; then
+                    ACTIVE_USER="$uid_name"
+                    break
+                fi
+            fi
+        done
+    fi
+fi
+
+if [ -z "$ACTIVE_USER" ] || [ "$ACTIVE_USER" = "root" ]; then
+    if [ -d "/home/gamecube" ]; then
+        ACTIVE_USER="gamecube"
+    elif [ -d "/home/deck" ]; then
+        ACTIVE_USER="deck"
+    else
+        ACTIVE_USER=$(ls -1 /home 2>/dev/null | head -n1 || echo "gamecube")
+    fi
+fi
+
+ACTIVE_UID=$(id -u "$ACTIVE_USER" 2>/dev/null || echo "1000")
+USER_HOME=$(eval echo "~$ACTIVE_USER")
+
+echo "[GameCube-Helper] Target desktop user: \${ACTIVE_USER} (UID: \${ACTIVE_UID})"
+
+export XDG_RUNTIME_DIR="/run/user/\${ACTIVE_UID}"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/\${ACTIVE_UID}/bus"
+
+# 2. Detect Gamescope Wayland/X11 session desktop file
+GAMESCOPE_SESSION=""
+for candidate in \\
+    "gamescope-wayland.desktop" \\
+    "gamescope-session.desktop" \\
+    "steam.desktop" \\
+    "steam-wayland.desktop" \\
+    "steamos.desktop" \\
+    "gamescope.desktop"; do
+    if [ -f "/usr/share/wayland-sessions/\${candidate}" ] || [ -f "/usr/share/xsessions/\${candidate}" ]; then
+        GAMESCOPE_SESSION="\${candidate}"
+        break
+    fi
+done
+
+if [ -z "$GAMESCOPE_SESSION" ]; then
+    GAMESCOPE_SESSION="gamescope-wayland.desktop"
+fi
+
+echo "[GameCube-Helper] Selected Gamescope session target: \${GAMESCOPE_SESSION}"
+
+# 3. Configure SDDM autologin with Relogin=true to PREVENT GREETER on restart
+if [ -d "/etc/sddm.conf.d" ]; then
+    mkdir -p "/etc/sddm.conf.d" 2>/dev/null || true
+    cat << EOF > /etc/sddm.conf.d/zz-gamecube-session.conf 2>/dev/null || true
+[Autologin]
+User=\${ACTIVE_USER}
+Session=\${GAMESCOPE_SESSION}
+Relogin=true
+EOF
+    echo "[GameCube-Helper] Updated /etc/sddm.conf.d/zz-gamecube-session.conf (Relogin=true)"
+fi
+
+# Also update SDDM Last Session state so Gamescope is pre-selected as fallback
+if [ -d "/var/lib/sddm" ]; then
+    mkdir -p "/var/lib/sddm" 2>/dev/null || true
+    SESSION_PATH="/usr/share/wayland-sessions/\${GAMESCOPE_SESSION}"
+    if [ ! -f "$SESSION_PATH" ]; then
+        SESSION_PATH="/usr/share/xsessions/\${GAMESCOPE_SESSION}"
+    fi
+    cat << EOF > /var/lib/sddm/state.conf 2>/dev/null || true
+[Last]
+Session=\${SESSION_PATH}
+User=\${ACTIVE_USER}
+EOF
+    echo "[GameCube-Helper] Updated /var/lib/sddm/state.conf (Last Session: \${SESSION_PATH})"
+fi
+
+# 4. If steamos-session-select exists, ensure gamescope is configured
+if command -v steamos-session-select >/dev/null 2>&1; then
+    echo "[GameCube-Helper] Running steamos-session-select gamescope..."
+    steamos-session-select gamescope 2>/dev/null || true
+fi
+
+# 5. Attempt graceful restart via user systemd units (SteamOS / Bazzite / ChimeraOS)
+RESTARTED=false
+
+for unit in \\
+    "gamescope-session.service" \\
+    "gamescope-session-steam.service" \\
+    "gamescope-session@steam.service" \\
+    "gamescope-session-plus.service" \\
+    "gamescope-session.target"; do
+    if sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" systemctl --user is-active --quiet "$unit" 2>/dev/null; then
+        echo "[GameCube-Helper] Restarting active systemd user unit: \${unit}..."
+        sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" systemctl --user restart "$unit" 2>/dev/null || true
+        RESTARTED=true
+        break
+    fi
+done
+
+# 6. If no active systemd unit caught it, gracefully restart Steam client
+if [ "$RESTARTED" = false ]; then
+    echo "[GameCube-Helper] Sending graceful shutdown signal to Steam client..."
+    if [ "\$(whoami)" = "$ACTIVE_USER" ]; then
+        steam -shutdown 2>/dev/null || true
+    else
+        sudo -u "$ACTIVE_USER" steam -shutdown 2>/dev/null || true
+    fi
+    sleep 2
+    pkill -u "$ACTIVE_UID" -x steam 2>/dev/null || true
+fi
+
+echo "[GameCube-Helper] Seamless Steam / Gamescope session reload complete!"
+exit 0
+`;
+
+/**
+ * Ensures SDDM is configured with Relogin=true and Session pointing to Gamescope,
+ * so whenever Steam/Gamescope restarts, SDDM never drops to the login greeter.
+ */
+function ensureSddmAutologinRelogin(activeUser: string) {
+  try {
+    const sddmConfD = '/host_root/etc/sddm.conf.d';
+    if (fs.existsSync(sddmConfD)) {
+      let session = 'gamescope-wayland.desktop';
+      const waylandDir = '/host_root/usr/share/wayland-sessions';
+      const xDir = '/host_root/usr/share/xsessions';
+      const candidates = [
+        'gamescope-wayland.desktop',
+        'gamescope-session.desktop',
+        'steam.desktop',
+        'steam-wayland.desktop',
+        'steamos.desktop',
+        'gamescope.desktop',
+      ];
+      for (const c of candidates) {
+        if (fs.existsSync(path.join(waylandDir, c)) || fs.existsSync(path.join(xDir, c))) {
+          session = c;
+          break;
+        }
+      }
+
+      const confPath = path.join(sddmConfD, 'zz-gamecube-session.conf');
+      const content = `[Autologin]\nUser=${activeUser}\nSession=${session}\nRelogin=true\n`;
+      try {
+        fs.writeFileSync(confPath, content, 'utf-8');
+        console.log(`[Steam] Ensured SDDM autologin (Relogin=true, Session=${session}) at ${confPath}`);
+      } catch {}
+
+      const stateDir = '/host_root/var/lib/sddm';
+      if (fs.existsSync(stateDir)) {
+        let fullPath = `/usr/share/wayland-sessions/${session}`;
+        if (!fs.existsSync(path.join(waylandDir, session)) && fs.existsSync(path.join(xDir, session))) {
+          fullPath = `/usr/share/xsessions/${session}`;
+        }
+        const stateConf = path.join(stateDir, 'state.conf');
+        try {
+          fs.writeFileSync(stateConf, `[Last]\nSession=${fullPath}\nUser=${activeUser}\n`, 'utf-8');
+        } catch {}
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Steam] Could not verify SDDM autologin:', err.message);
+  }
+}
+
+/**
+ * Ensures the seamless GameCube restart helper is present on the host filesystem.
+ */
+function ensureGamecubeRestartHelperInstalled() {
+  try {
+    const targetDir = '/host_root/usr/local/bin';
+    const targetPath = path.join(targetDir, 'gamecube-restart-steam');
+    if (!fs.existsSync(targetPath) && fs.existsSync(targetDir)) {
+      fs.writeFileSync(targetPath, GAMECUBE_HELPER_SCRIPT_CONTENT, { mode: 0o755 });
+      console.log(`[Steam] Auto-installed seamless helper script to ${targetPath}`);
+    }
+  } catch (err: any) {
+    console.warn('[Steam] Could not auto-install gamecube-restart-steam:', err.message);
+  }
+}
+
+function findSteamOsHelperScripts(): string[] {
+  const found: string[] = [];
   const check = (p: string) => {
-    if (!p || checked.has(p)) return;
-    checked.add(p);
     try {
-      if (fs.existsSync(p)) {
+      if (fs.existsSync(p) && !found.includes(p)) {
         found.push(p);
       }
     } catch {}
   };
 
-  // 1. Manually configured helper script path in settings
+  // 1. Dedicated GameCube restart helper script (highest priority)
+  check('/host_root/usr/local/bin/gamecube-restart-steam');
+  check('/host_root/usr/bin/gamecube-restart-steam');
+
+  // 2. Manually configured helper script path in settings
   const configured = settingsQueries.get('steamos_helper_script', '');
   if (configured) {
     check(toInternalPath(configured));
     check(configured);
   }
 
-  // 2. Standard SteamOS / Bazzite system scripts
+  // 3. Standard SteamOS / Bazzite system scripts
   const standard = [
-    '/host_root/usr/bin/steamos-session-select',
-    '/host_root/usr/local/bin/steamos-session-select',
-    '/host_root/usr/bin/steamosctl',
     '/host_root/usr/local/bin/restart-gamescope',
     '/host_root/usr/bin/restart-gamescope',
     '/host_root/usr/local/bin/restart-steam',
     '/host_root/usr/bin/restart-steam',
-    '/host_root/usr/bin/gamescope-session-steam',
-    '/host_root/usr/bin/gamescope-session',
+    '/host_root/usr/bin/steamos-session-select',
+    '/host_root/usr/local/bin/steamos-session-select',
+    '/host_root/usr/bin/steamosctl',
   ];
   standard.forEach(check);
-
-  // 3. Scan /usr/local/bin for custom helper scripts
-  try {
-    const localBin = '/host_root/usr/local/bin';
-    if (fs.existsSync(localBin)) {
-      for (const f of fs.readdirSync(localBin)) {
-        const lower = f.toLowerCase();
-        if (lower.includes('steam') || lower.includes('gamescope') || lower.includes('gamemode') || lower.includes('session')) {
-          check(path.join(localBin, f));
-        }
-      }
-    }
-  } catch {}
-
-  // 4. Scan user directories under /home/* (e.g. /home/gamecube/bin, ~/.local/bin, ~/...)
-  try {
-    const homeRoot = '/host_root/home';
-    if (fs.existsSync(homeRoot)) {
-      const users = fs.readdirSync(homeRoot, { withFileTypes: true }).filter((d) => d.isDirectory());
-      for (const u of users) {
-        const uDir = path.join(homeRoot, u.name);
-        const subDirs = [
-          path.join(uDir, 'bin'),
-          path.join(uDir, '.local', 'bin'),
-          uDir,
-        ];
-        for (const s of subDirs) {
-          if (fs.existsSync(s)) {
-            try {
-              for (const f of fs.readdirSync(s)) {
-                const lower = f.toLowerCase();
-                if (
-                  lower.endsWith('.sh') ||
-                  lower.includes('steam') ||
-                  lower.includes('gamescope') ||
-                  lower.includes('gamemode')
-                ) {
-                  check(path.join(s, f));
-                }
-              }
-            } catch {}
-          }
-        }
-      }
-    }
-  } catch {}
 
   return found;
 }
@@ -1427,10 +1583,41 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
     }
   } catch {}
 
-  // 1. First priority: Execute detected helper scripts for SteamOS / Gamescope
+  // 1. Ensure SDDM autologin with Relogin=true is active to prevent greeter drop
+  ensureSddmAutologinRelogin(activeUser);
+
+  // 2. Ensure GameCube helper script is deployed on host
+  ensureGamecubeRestartHelperInstalled();
+
+  // 3. Priority: Run dedicated GameCube restart helper if present
   const helpers = findSteamOsHelperScripts();
   console.log(`[Steam] Found helper scripts on host (user: ${activeUser}, UID: ${activeUid}):`, helpers);
 
+  const configured = settingsQueries.get('steamos_helper_script', '');
+  for (const script of helpers) {
+    const hostPath = toCleanPath(script);
+    const basename = path.basename(script);
+
+    if (basename === 'gamecube-restart-steam' || (configured && script === toInternalPath(configured))) {
+      try {
+        console.log(`[Steam] Executing primary seamless helper: ${hostPath}`);
+        execSync(
+          `chroot /host_root ${hostPath} 2>/dev/null || chroot /host_root runuser -u ${activeUser} -- ${hostPath} 2>/dev/null || true`,
+          { timeout: 8000, stdio: 'ignore' }
+        );
+        executed.push(basename);
+        return {
+          success: true,
+          methods: executed,
+          message: `Выполнен бесшовный перезапуск через ${basename}. Сессия Gamescope обновится автоматически без выхода в окно SDDM.`,
+        };
+      } catch (err: any) {
+        console.warn(`[Steam] Primary helper ${basename} failed:`, err.message);
+      }
+    }
+  }
+
+  // Fallback if dedicated helper did not run:
   for (const script of helpers) {
     const hostPath = toCleanPath(script);
     const basename = path.basename(script);
@@ -1441,8 +1628,7 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
         execSync(`chroot /host_root ${hostPath} gamescope 2>/dev/null || true`, { timeout: 4000, stdio: 'ignore' });
         executed.push(`steamos-session-select gamescope`);
       } else if (basename !== 'gamescope-session-steam' && basename !== 'gamescope-session') {
-        // Run custom user helper script directly as active user
-        console.log(`[Steam] Executing custom helper: ${hostPath}`);
+        console.log(`[Steam] Executing helper: ${hostPath}`);
         execSync(
           `chroot /host_root runuser -u ${activeUser} -- ${hostPath} 2>/dev/null || chroot /host_root ${hostPath} 2>/dev/null || true`,
           { timeout: 5000, stdio: 'ignore' }
@@ -1454,7 +1640,7 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
     }
   }
 
-  // 2. Restart Gamescope session cleanly through user systemd (keeps Gamescope compositor alive)
+  // Restart Gamescope session cleanly through user systemd
   try {
     console.log(`[Steam] Restarting gamescope-session via systemd --user for ${activeUser}...`);
     execSync(
@@ -1465,7 +1651,7 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
     executed.push('systemctl --user restart gamescope-session');
   } catch {}
 
-  // 3. Ensure Gamescope is the selected session for SteamOS
+  // Ensure Gamescope is the selected session for SteamOS
   const hasSessionSelect = fs.existsSync('/host_root/usr/bin/steamos-session-select') || fs.existsSync('/host_root/usr/local/bin/steamos-session-select');
   if (hasSessionSelect) {
     try {
@@ -1474,7 +1660,7 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
     } catch {}
   }
 
-  // 4. Clean graceful steam -shutdown (NEVER use pkill -f "/steam", which kills gamescope-session-steam and crashes SDDM!)
+  // Graceful steam -shutdown
   try {
     execSync(`chroot /host_root runuser -u ${activeUser} -- steam -shutdown 2>/dev/null || chroot /host_root steam -shutdown 2>/dev/null || true`, {
       timeout: 3000,

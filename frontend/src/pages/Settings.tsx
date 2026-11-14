@@ -67,6 +67,27 @@ export const Settings: React.FC = () => {
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cleaningCache, setCleaningCache] = useState(false);
   const [cleanResult, setCleanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testingSteamRestart, setTestingSteamRestart] = useState(false);
+
+  const handleTestSteamRestart = async () => {
+    setTestingSteamRestart(true);
+    try {
+      const res = await api.post('/steam/restart-steam');
+      await alert({
+        title: 'Тест перезапуска SteamOS',
+        message: res.data?.message || 'Команда бесшовного перезапуска выполнена успешно.',
+        variant: 'success',
+      });
+    } catch (err: any) {
+      await alert({
+        title: 'Ошибка перезапуска',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
+    } finally {
+      setTestingSteamRestart(false);
+    }
+  };
 
   // Test states
   const [testingQb, setTestingQb] = useState(false);
@@ -598,15 +619,27 @@ export const Settings: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Пользовательский скрипт перезапуска SteamOS / Gamescope (опционально)
                 </label>
-                <input
-                  type="text"
-                  value={settings.steamos_helper_script || ''}
-                  onChange={(e) => handleChange('steamos_helper_script', e.target.value)}
-                  placeholder="/usr/local/bin/restart-steam.sh или steamos-session-select"
-                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-                />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={settings.steamos_helper_script || ''}
+                    onChange={(e) => handleChange('steamos_helper_script', e.target.value)}
+                    placeholder="/usr/local/bin/gamecube-restart-steam"
+                    className="flex-1 bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestSteamRestart}
+                    disabled={testingSteamRestart}
+                    className="px-4 py-2.5 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 flex-shrink-0 shadow-md shadow-blue-500/20"
+                    title="Проверить выполнение скрипта перезапуска без вылета в SDDM"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testingSteamRestart ? 'animate-spin' : ''}`} />
+                    <span>{testingSteamRestart ? 'Запуск...' : 'Тест перезапуска'}</span>
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Если указан путь к вашему скрипту, он будет вызываться для безопасного перезапуска Game Mode через композитор Gamescope без сброса в окно SDDM.
+                  Вызывается для бесшовного мягкого перезапуска Game Mode без сброса в окно SDDM (greeter). По умолчанию используется встроенный хелпер <code>/usr/local/bin/gamecube-restart-steam</code> с автоматической настройкой <code>Relogin=true</code>.
                 </p>
               </div>
 
