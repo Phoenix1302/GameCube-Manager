@@ -21,6 +21,223 @@ function getSteamGridDbKey(): string {
   return settingsQueries.get('steamgriddb_api_key', config.steamGridDbApiKey);
 }
 
+export function toCleanPath(p: string): string {
+  if (p.startsWith('/host_root')) {
+    const stripped = p.slice('/host_root'.length);
+    return stripped.startsWith('/') ? stripped : '/' + stripped;
+  }
+  return p;
+}
+
+export function toInternalPath(p: string): string {
+  if (fs.existsSync(p)) return p;
+  if (!p.startsWith('/host_root') && fs.existsSync('/host_root' + p)) {
+    return '/host_root' + p;
+  }
+  return p;
+}
+
+function parseAcfFile(filePath: string): Record<string, string> {
+  try {
+    const text = fs.readFileSync(filePath, 'utf-8');
+    const result: Record<string, string> = {};
+    const regex = /"([^"]+)"\s+"([^"]+)"/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      result[match[1]] = match[2];
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+export function findSteamLibraryFolders(): string[] {
+  const libraries = new Set<string>();
+
+  // 1. Explicitly check user's main game drive: /mnt/game_data/SteamLibrary
+  const primaryCandidates = [
+    '/mnt/game_data/SteamLibrary',
+    '/host_root/mnt/game_data/SteamLibrary',
+  ];
+  for (const cand of primaryCandidates) {
+    if (fs.existsSync(cand)) {
+      libraries.add(cand);
+    }
+  }
+
+  // 2. Check settings / config if configured
+  const configured = settingsQueries.get('steam_library_path', '');
+  if (configured) {
+    const internal = toInternalPath(configured);
+    if (fs.existsSync(internal)) {
+      libraries.add(internal);
+    }
+  }
+
+  // 3. Scan libraryfolders.vdf
+  const vdfCandidates = [
+    '/host_root/home/gamecube/.local/share/Steam/steamapps/libraryfolders.vdf',
+    '/host_root/home/gamecube/.steam/steam/steamapps/libraryfolders.vdf',
+    '/host_root/home/deck/.local/share/Steam/steamapps/libraryfolders.vdf',
+    '/home/gamecube/.local/share/Steam/steamapps/libraryfolders.vdf',
+  ];
+
+  const userdata = getSteamUserdataDir();
+  if (userdata) {
+    const steamRoot = path.dirname(userdata);
+    vdfCandidates.unshift(path.join(steamRoot, 'steamapps', 'libraryfolders.vdf'));
+  }
+
+  for (const vdfPath of vdfCandidates) {
+    if (fs.existsSync(vdfPath)) {
+      try {
+        const content = fs.readFileSync(vdfPath, 'utf-8');
+        const pathMatches = content.matchAll(/"path"\s+"([^"]+)"/g);
+        for (const m of pathMatches) {
+          const rawPath = m[1];
+          const resolved = toInternalPath(rawPath);
+          if (fs.existsSync(resolved)) {
+            libraries.add(resolved);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Steam] Failed to parse libraryfolders at ${vdfPath}:`, err);
+      }
+    }
+  }
+
+  return Array.from(libraries);
+}
+
+export interface InstalledGameInfo {
+  appId: number | null;
+  name: string;
+  installDir: string;
+  fullPath: string;
+  displayPath: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  headerImage: string;
+  isOfficialSteam: boolean;
+  libraryPath: string;
+  libraryDisplayPath: string;
+  lastUpdated?: string;
+}
+
+export function scanInstalledGames(): { libraries: Array<{ path: string; displayPath: string; gamesCount: number }>; games: InstalledGameInfo[] } {
+  const libraryDirs = findSteamLibraryFolders();
+  const allGames: InstalledGameInfo[] = [];
+  const librariesSummary: Array<{ path: string; displayPath: string; gamesCount: number }> = [];
+
+  for (const libDir of libraryDirs) {
+    const steamappsDir = path.join(libDir, 'steamapps');
+    const commonDir = path.join(steamappsDir, 'common');
+    let libGameCount = 0;
+
+    const matchedCommonDirs = new Set<string>();
+
+    // 1. Read appmanifest_*.acf files if steamapps exists
+    if (fs.existsSync(steamappsDir)) {
+      try {
+        const files = fs.readdirSync(steamappsDir);
+        for (const file of files) {
+          if (file.startsWith('appmanifest_') && file.endsWith('.acf')) {
+            const manifestPath = path.join(steamappsDir, file);
+            const data = parseAcfFile(manifestPath);
+            const appId = data['appid'] ? parseInt(data['appid'], 10) : null;
+            const name = data['name'] || data['installdir'];
+            const installDir = data['installdir'];
+            const sizeBytes = data['SizeOnDisk'] ? parseInt(data['SizeOnDisk'], 10) : 0;
+            const lastUpdated = data['LastUpdated'];
+
+            if (installDir) {
+              matchedCommonDirs.add(installDir.toLowerCase());
+              const gameFullPath = path.join(commonDir, installDir);
+              const exists = fs.existsSync(gameFullPath);
+
+              const isRuntime = /steam linux runtime|proton/i.test(name || installDir);
+              if (!isRuntime && (exists || sizeBytes > 0)) {
+                libGameCount++;
+                allGames.push({
+                  appId,
+                  name: name || installDir,
+                  installDir,
+                  fullPath: gameFullPath,
+                  displayPath: toCleanPath(gameFullPath),
+                  sizeBytes,
+                  sizeFormatted: formatBytes(sizeBytes),
+                  headerImage: appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '',
+                  isOfficialSteam: true,
+                  libraryPath: libDir,
+                  libraryDisplayPath: toCleanPath(libDir),
+                  lastUpdated,
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Steam] Error reading manifests in ${steamappsDir}:`, err);
+      }
+    }
+
+    // 2. Scan commonDir for folders that weren't in manifests (custom/pirated games)
+    if (fs.existsSync(commonDir)) {
+      try {
+        const entries = fs.readdirSync(commonDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const folderName = entry.name;
+            if (/steam linux runtime|proton/i.test(folderName)) continue;
+
+            if (!matchedCommonDirs.has(folderName.toLowerCase())) {
+              const gameFullPath = path.join(commonDir, folderName);
+              libGameCount++;
+              allGames.push({
+                appId: null,
+                name: folderName,
+                installDir: folderName,
+                fullPath: gameFullPath,
+                displayPath: toCleanPath(gameFullPath),
+                sizeBytes: 0,
+                sizeFormatted: 'Локальная папка',
+                headerImage: '',
+                isOfficialSteam: false,
+                libraryPath: libDir,
+                libraryDisplayPath: toCleanPath(libDir),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Steam] Error scanning common dir in ${commonDir}:`, err);
+      }
+    }
+
+    librariesSummary.push({
+      path: libDir,
+      displayPath: toCleanPath(libDir),
+      gamesCount: libGameCount,
+    });
+  }
+
+  // Sort games by name
+  allGames.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+  return {
+    libraries: librariesSummary,
+    games: allGames,
+  };
+}
+
 /**
  * Finds the first valid Steam user ID directory under Steam userdata
  */
@@ -53,6 +270,39 @@ function findSteamUserConfigDir(): { userDir: string; configDir: string; gridDir
 
 export async function steamRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
+
+  // List real installed Steam games from discovered libraries (e.g. /mnt/game_data/SteamLibrary)
+  fastify.get('/installed-games', async (request, reply) => {
+    try {
+      const data = scanInstalledGames();
+      return data;
+    } catch (err: any) {
+      return reply.status(500).send({
+        error: 'Failed to scan installed Steam games',
+        details: err.message,
+      });
+    }
+  });
+
+  // List discovered Steam libraries
+  fastify.get('/libraries', async (request, reply) => {
+    try {
+      const rawLibs = findSteamLibraryFolders();
+      return {
+        libraries: rawLibs.map((p) => ({
+          path: p,
+          displayPath: toCleanPath(p),
+          commonPath: toCleanPath(path.join(p, 'steamapps', 'common')),
+          exists: fs.existsSync(p),
+        })),
+      };
+    } catch (err: any) {
+      return reply.status(500).send({
+        error: 'Failed to get Steam libraries',
+        details: err.message,
+      });
+    }
+  });
 
   // List existing shortcuts
   fastify.get('/shortcuts', async (request, reply) => {

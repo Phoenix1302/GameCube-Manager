@@ -8,12 +8,14 @@ ContainerName=gamecube-web
 Pod=gamecube.pod
 Image=localhost/gamecube-manager:1.0.1
 Volume=/:/host_root:rslave
+Volume=/mnt/game_data:/mnt/game_data:rw
 Volume=gamecube-data:/app/backend/data:rw
 Environment=PORT=3000
 Environment=HOST=127.0.0.1
 Environment=NODE_ENV=production
 Environment=HOST_ROOT=/host_root
 Environment=STEAM_USERDATA_PATH=/host_root/home/gamecube/.local/share/Steam/userdata
+Environment=STEAM_LIBRARY_PATH=/host_root/mnt/game_data/SteamLibrary
 Environment=QBITTORRENT_URL=http://127.0.0.1:8085
 SecurityLabelDisable=true
 

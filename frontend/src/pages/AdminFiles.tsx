@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import {
   FolderTree,
@@ -19,11 +20,15 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  Gamepad2,
+  DownloadCloud,
+  HardDrive,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { FileItem } from '../types';
 
 export const AdminFiles: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [currentPath, setCurrentPath] = useState<string>('');
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [rootPath, setRootPath] = useState<string>('');
@@ -50,8 +55,9 @@ export const AdminFiles: React.FC = () => {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    loadFiles(currentPath);
-  }, []);
+    const initialPath = searchParams.get('path');
+    loadFiles(initialPath || currentPath);
+  }, [searchParams]);
 
   const loadFiles = async (targetPath: string) => {
     try {
@@ -238,7 +244,7 @@ export const AdminFiles: React.FC = () => {
             Root Файловый менеджер
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Полный доступ к файловой системе хоста (/host_root): просмотр, создание, редактирование и загрузка.
+            Прямой доступ к файловой системе хоста и накопителям: просмотр, создание, редактирование и загрузка.
           </p>
         </div>
 
@@ -264,10 +270,56 @@ export const AdminFiles: React.FC = () => {
         </div>
       </div>
 
+      {/* Quick Navigation Bookmarks Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-3 scrollbar-none text-xs">
+        <span className="text-slate-500 font-semibold uppercase text-[10px] tracking-wider flex-shrink-0">
+          Быстрый переход:
+        </span>
+        {[
+          {
+            label: 'Steam common',
+            icon: Gamepad2,
+            path: '/mnt/game_data/SteamLibrary/steamapps/common',
+            color: 'text-steam-accent border-steam-accent/30 bg-steam-accent/10',
+          },
+          {
+            label: 'Загрузки',
+            icon: DownloadCloud,
+            path: '/mnt/game_data/Downloads',
+            color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+          },
+          {
+            label: 'Steam Userdata',
+            icon: HardDrive,
+            path: '/home/gamecube/.local/share/Steam/userdata',
+            color: 'text-indigo-300 border-indigo-500/30 bg-indigo-500/10',
+          },
+          {
+            label: 'Корень (Root)',
+            icon: Folder,
+            path: '/',
+            color: 'text-slate-300 border-steam-border bg-steam-card',
+          },
+        ].map((bm) => {
+          const Icon = bm.icon;
+          return (
+            <button
+              key={bm.path}
+              type="button"
+              onClick={() => loadFiles(bm.path)}
+              className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition-all cursor-pointer whitespace-nowrap hover:scale-105 active:scale-95 ${bm.color}`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{bm.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Drag & Drop Alert Overlay */}
       {isDragging && (
         <div className="mb-6 p-8 border-2 border-dashed border-steam-cyan bg-steam-cyan/10 rounded-2xl text-center text-steam-cyan font-bold animate-pulse">
-          Отпустите файлы для загрузки в текущую директорию: {currentPath}
+          Отпустите файлы для загрузки в текущую директорию: {(currentPath || rootPath).replace(/^\/host_root/, '') || '/'}
         </div>
       )}
 
@@ -276,14 +328,16 @@ export const AdminFiles: React.FC = () => {
         {parentPath !== null && (
           <button
             onClick={() => loadFiles(parentPath)}
-            className="p-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-slate-300 hover:text-white mr-1 transition-colors"
+            className="p-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-slate-300 hover:text-white mr-1 transition-colors cursor-pointer"
             title="Наверх"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
         )}
         <span className="text-slate-400">Путь:</span>
-        <span className="text-steam-accent font-semibold">{currentPath || rootPath}</span>
+        <span className="text-steam-accent font-semibold">
+          {(currentPath || rootPath).replace(/^\/host_root/, '') || '/'}
+        </span>
       </div>
 
       {/* Directory Content Table */}

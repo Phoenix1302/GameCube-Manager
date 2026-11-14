@@ -10,22 +10,39 @@ function getHostRoot(): string {
   return settingsQueries.get('host_root', config.hostRoot);
 }
 
+export function toDisplayPath(internalPath: string): string {
+  const hostRoot = getHostRoot();
+  if (hostRoot && hostRoot !== '/' && internalPath.startsWith(hostRoot)) {
+    const stripped = internalPath.slice(hostRoot.length);
+    return stripped.startsWith('/') ? stripped : '/' + stripped;
+  }
+  return internalPath;
+}
+
 function resolveFullPath(relOrAbsPath: string): string {
   const hostRoot = getHostRoot();
   if (!relOrAbsPath || relOrAbsPath === '/' || relOrAbsPath === '.') {
     return hostRoot;
   }
 
-  // If path already starts with hostRoot, normalize it
+  // If already prefixed with hostRoot, normalize
   if (relOrAbsPath.startsWith(hostRoot)) {
     return path.normalize(relOrAbsPath);
   }
 
-  // Strip leading slashes to prevent path.resolve from treating it as root
-  const cleanRel = relOrAbsPath.replace(/^[/\\]+/, '');
-  const resolved = path.resolve(hostRoot, cleanRel);
+  // If path directly exists inside container (e.g. direct volume mount like /mnt/game_data)
+  if (path.isAbsolute(relOrAbsPath) && fs.existsSync(relOrAbsPath)) {
+    return path.normalize(relOrAbsPath);
+  }
 
-  return resolved;
+  // Check if prepending hostRoot exists
+  const cleanRel = relOrAbsPath.replace(/^[/\\]+/, '');
+  const withHostRoot = path.resolve(hostRoot, cleanRel);
+  if (fs.existsSync(withHostRoot)) {
+    return withHostRoot;
+  }
+
+  return withHostRoot;
 }
 
 export async function filesRoutes(fastify: FastifyInstance) {
@@ -42,7 +59,7 @@ export async function filesRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({
         statusCode: 404,
         error: 'Not Found',
-        message: `Directory does not exist: ${fullPath}`,
+        message: `Directory does not exist: ${toDisplayPath(fullPath)}`,
       });
     }
 
@@ -64,7 +81,8 @@ export async function filesRoutes(fastify: FastifyInstance) {
           const itemStat = await fs.promises.stat(itemFullPath);
           return {
             name: entry.name,
-            path: itemFullPath,
+            path: toDisplayPath(itemFullPath),
+            rawPath: itemFullPath,
             isDirectory: entry.isDirectory(),
             isFile: entry.isFile(),
             isSymlink: entry.isSymbolicLink(),
@@ -75,7 +93,8 @@ export async function filesRoutes(fastify: FastifyInstance) {
         } catch {
           return {
             name: entry.name,
-            path: itemFullPath,
+            path: toDisplayPath(itemFullPath),
+            rawPath: itemFullPath,
             isDirectory: entry.isDirectory(),
             isFile: entry.isFile(),
             isSymlink: entry.isSymbolicLink(),
@@ -94,12 +113,14 @@ export async function filesRoutes(fastify: FastifyInstance) {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
-    const parentPath = fullPath === hostRoot ? null : path.dirname(fullPath);
+    const isAtRoot = fullPath === hostRoot || toDisplayPath(fullPath) === '/';
+    const parentPath = isAtRoot ? null : toDisplayPath(path.dirname(fullPath));
 
     return {
-      currentPath: fullPath,
+      currentPath: toDisplayPath(fullPath),
+      rawPath: fullPath,
       parentPath,
-      root: hostRoot,
+      root: '/',
       items,
     };
   });

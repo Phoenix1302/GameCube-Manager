@@ -6,8 +6,9 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-torrent
 Pod=gamecube.pod
-Image=localhost/gamecube-torrent:1.0.0
-Volume=gamecube-downloads:/downloads:rw
+Image=localhost/gamecube-torrent:1.0.1
+Volume=/mnt/game_data/Downloads:/downloads:rw
+Volume=/mnt/game_data:/mnt/game_data:rw
 Volume=gamecube-torrent-config:/config:rw
 SecurityLabelDisable=true
 

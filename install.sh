@@ -90,6 +90,29 @@ else
     echo -e "    ${YELLOW}!${NC} Steam userdata initialized at: ${STEAM_USERDATA}"
 fi
 
+# Detect Steam Library (prefer /mnt/game_data/SteamLibrary)
+STEAM_LIBRARY=""
+for candidate in \
+    "/mnt/game_data/SteamLibrary" \
+    "${USER_HOME}/.local/share/Steam" \
+    "${USER_HOME}/.steam/steam"; do
+    if [ -d "$candidate" ]; then
+        STEAM_LIBRARY="$candidate"
+        break
+    fi
+done
+
+if [ -n "$STEAM_LIBRARY" ]; then
+    echo -e "    ${GREEN}✔${NC} Steam Library detected: ${CYAN}${STEAM_LIBRARY}${NC}"
+fi
+
+# Direct high-speed NVMe/SSD storage mount
+GAME_DATA_VOL=""
+if [ -d "/mnt/game_data" ]; then
+    GAME_DATA_VOL="Volume=/mnt/game_data:/mnt/game_data:rw"
+    echo -e "    ${GREEN}✔${NC} Direct high-speed SSD mount configured: ${CYAN}/mnt/game_data${NC}"
+fi
+
 # Detect Downloads Directory (prefer high-capacity mount /mnt/game_data if present)
 DOWNLOADS_DIR=""
 if [ -d "/mnt/game_data" ] && [ -w "/mnt/game_data" ]; then
@@ -116,8 +139,8 @@ cd "$SCRIPT_DIR"
 echo -e "    - Building ${BOLD}gamecube-manager:1.0.1${NC} (Frontend + Backend)..."
 podman build -t localhost/gamecube-manager:1.0.1 .
 
-echo -e "    - Building ${BOLD}gamecube-torrent:1.0.0${NC} (Headless qBittorrent)..."
-podman build -t localhost/gamecube-torrent:1.0.0 deploy/qbittorrent
+echo -e "    - Building ${BOLD}gamecube-torrent:1.0.1${NC} (Headless qBittorrent)..."
+podman build -t localhost/gamecube-torrent:1.0.1 deploy/qbittorrent
 
 echo -e "    - Building ${BOLD}gamecube-proxy:1.0.0${NC} (Nginx SSL Reverse Proxy)..."
 podman build -t localhost/gamecube-proxy:1.0.0 deploy/nginx
@@ -160,11 +183,13 @@ Pod=gamecube.pod
 Image=localhost/gamecube-manager:1.0.1
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
+${GAME_DATA_VOL}
 Environment=PORT=3000
 Environment=HOST=127.0.0.1
 Environment=NODE_ENV=production
 Environment=HOST_ROOT=/host_root
 Environment=STEAM_USERDATA_PATH=/host_root${STEAM_USERDATA}
+Environment=STEAM_LIBRARY_PATH=/host_root${STEAM_LIBRARY}
 Environment=QBITTORRENT_URL=http://127.0.0.1:8085
 SecurityLabelDisable=true
 
@@ -185,9 +210,10 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-torrent
 Pod=gamecube.pod
-Image=localhost/gamecube-torrent:1.0.0
+Image=localhost/gamecube-torrent:1.0.1
 Volume=${DOWNLOADS_DIR}:/downloads:rw
 Volume=gamecube-torrent-config:/config:rw
+${GAME_DATA_VOL}
 SecurityLabelDisable=true
 
 [Service]

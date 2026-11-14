@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Magnet,
   Copy,
+  FolderOpen,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { GameDetails, RutrackerRelease } from '../types';
@@ -48,6 +49,7 @@ export const GameModal: React.FC<GameModalProps> = ({
   const [rutrackerError, setRutrackerError] = useState<string | null>(null);
   const [rutrackerConfigured, setRutrackerConfigured] = useState<boolean | null>(null);
   const [customSearchQuery, setCustomSearchQuery] = useState('');
+  const [downloadSavePath, setDownloadSavePath] = useState<string>('/downloads');
   const [downloadingTopicId, setDownloadingTopicId] = useState<number | null>(null);
   const [downloadSuccessMap, setDownloadSuccessMap] = useState<Record<number, boolean>>({});
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
@@ -111,6 +113,7 @@ export const GameModal: React.FC<GameModalProps> = ({
     try {
       await api.post('/rutracker/download', {
         topicId: release.id,
+        savePath: downloadSavePath || undefined,
       });
       setDownloadSuccessMap((prev) => ({ ...prev, [release.id]: true }));
       setDownloadMessage(`Раздача «${release.title.substring(0, 50)}...» отправлена в qBittorrent!`);
@@ -411,6 +414,22 @@ export const GameModal: React.FC<GameModalProps> = ({
                       <span>Искать</span>
                     </button>
                   </form>
+
+                  {/* Target save directory picker */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <FolderOpen className="w-3.5 h-3.5 text-steam-cyan" />
+                      <span>Папка назначения:</span>
+                    </div>
+                    <select
+                      value={downloadSavePath}
+                      onChange={(e) => setDownloadSavePath(e.target.value)}
+                      className="bg-steam-nav text-slate-200 border border-steam-border text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-steam-blue font-mono"
+                    >
+                      <option value="/downloads">Папка загрузок (/mnt/game_data/Downloads)</option>
+                      <option value="/mnt/game_data/SteamLibrary/steamapps/common">Библиотека Steam (/mnt/game_data/SteamLibrary/steamapps/common)</option>
+                    </select>
+                  </div>
 
                   {/* Warning / Error State */}
                   {rutrackerError && (

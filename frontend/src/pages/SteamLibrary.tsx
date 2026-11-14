@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FolderSync,
   Plus,
@@ -13,11 +14,27 @@ import {
   ExternalLink,
   ChevronRight,
   Info,
+  Gamepad2,
+  FolderOpen,
+  ArrowUpRight,
+  RefreshCw,
+  Folder,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { SteamShortcut, SteamGridAsset } from '../types';
 
 export const SteamLibrary: React.FC = () => {
+  const navigate = useNavigate();
+
+  // Active view tab: installed games vs non-steam shortcuts
+  const [activeTab, setActiveTab] = useState<'installed' | 'shortcuts'>('installed');
+
+  // Installed Steam games state
+  const [installedGames, setInstalledGames] = useState<any[]>([]);
+  const [libraries, setLibraries] = useState<any[]>([]);
+  const [loadingInstalled, setLoadingInstalled] = useState(true);
+  const [installedSearch, setInstalledSearch] = useState('');
+
   // Existing shortcuts
   const [shortcuts, setShortcuts] = useState<SteamShortcut[]>([]);
   const [loadingShortcuts, setLoadingShortcuts] = useState(true);
@@ -52,8 +69,22 @@ export const SteamLibrary: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    loadInstalledGames();
     loadShortcuts();
   }, []);
+
+  const loadInstalledGames = async () => {
+    try {
+      setLoadingInstalled(true);
+      const res = await api.get('/steam/installed-games');
+      setInstalledGames(res.data.games || []);
+      setLibraries(res.data.libraries || []);
+    } catch (err) {
+      console.error('Failed to load installed games', err);
+    } finally {
+      setLoadingInstalled(false);
+    }
+  };
 
   const loadShortcuts = async () => {
     try {
@@ -205,16 +236,89 @@ export const SteamLibrary: React.FC = () => {
     }
   };
 
+  const handleImportToShortcut = (game: any) => {
+    setAppName(game.name);
+    setStartDir(game.displayPath);
+    setExePath(game.displayPath);
+    setGridSearchTerm(game.name);
+    setActiveTab('shortcuts');
+  };
+
+  const filteredInstalled = installedGames.filter(
+    (g) =>
+      g.name.toLowerCase().includes(installedSearch.toLowerCase()) ||
+      g.installDir.toLowerCase().includes(installedSearch.toLowerCase())
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-          <FolderSync className="w-7 h-7 text-steam-accent" />
-          Интеграция сторонних игр со Steam
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Бесшовное добавление внешних игр в Steam Deck / SteamOS с автоматическим подбором обложек SteamGridDB и настройкой Proton.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+            <Gamepad2 className="w-7 h-7 text-steam-accent" />
+            Библиотека Steam & Игры
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Управление установленными играми Steam на накопителях и интеграция сторонних игр с Proton и SteamGridDB.
+          </p>
+        </div>
+
+        {libraries.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {libraries.map((lib, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() =>
+                  navigate(`/admin/files?path=${encodeURIComponent(lib.displayPath + '/steamapps/common')}`)
+                }
+                className="px-3.5 py-2 rounded-xl bg-steam-card border border-steam-border/80 text-xs text-slate-300 hover:text-white hover:border-steam-accent flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                title="Открыть директорию steamapps/common в файловом менеджере"
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-steam-accent" />
+                <span className="font-mono">{lib.displayPath}</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-steam-accent/20 text-steam-accent">
+                  {lib.gamesCount} игр
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs navigation */}
+      <div className="flex items-center gap-3 border-b border-steam-border mb-8">
+        <button
+          type="button"
+          onClick={() => setActiveTab('installed')}
+          className={`pb-3 px-2 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'installed'
+              ? 'border-steam-accent text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Gamepad2 className="w-4 h-4 text-steam-accent" />
+          <span>Установленные игры в Steam</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-steam-accent/15 text-steam-accent font-mono font-bold">
+            {installedGames.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('shortcuts')}
+          className={`pb-3 px-2 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'shortcuts'
+              ? 'border-steam-cyan text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Plus className="w-4 h-4 text-steam-cyan" />
+          <span>Сторонние ярлыки (Non-Steam)</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-steam-cyan/15 text-steam-cyan font-mono font-bold">
+            {shortcuts.length}
+          </span>
+        </button>
       </div>
 
       {successMsg && (
@@ -227,37 +331,176 @@ export const SteamLibrary: React.FC = () => {
         </div>
       )}
 
-      {/* Main Wizard Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        <div className="lg:col-span-2 space-y-6">
-          <form onSubmit={handleSaveToSteam} className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Plus className="w-5 h-5 text-steam-blue" />
-              Параметры запуска новой игры
-            </h3>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Название игры (в библиотеке Steam) *
-              </label>
-              <input
-                type="text"
-                value={appName}
-                onChange={(e) => setAppName(e.target.value)}
-                placeholder="Например: Cyberpunk 2077"
-                required
-                className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-              />
+      {/* TAB 1: INSTALLED STEAM GAMES */}
+      {activeTab === 'installed' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-steam-card border border-steam-border/80">
+            <div className="flex items-center gap-2 flex-1 max-w-md">
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  value={installedSearch}
+                  onChange={(e) => setInstalledSearch(e.target.value)}
+                  placeholder="Поиск по установленным играм..."
+                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl pl-9 pr-4 py-2 border border-steam-border focus:outline-none focus:border-steam-accent"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Путь к исполняемому файлу (.exe / .sh) *
-              </label>
-              <input
-                type="text"
-                value={exePath}
-                onChange={(e) => handleExeChange(e.target.value)}
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={loadInstalledGames}
+                disabled={loadingInstalled}
+                className="px-3 py-2 rounded-xl bg-steam-nav hover:bg-slate-800 text-slate-300 hover:text-white border border-steam-border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Пересканировать директории Steam"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingInstalled ? 'animate-spin' : ''}`} />
+                <span>Обновить список</span>
+              </button>
+            </div>
+          </div>
+
+          {loadingInstalled ? (
+            <div className="py-24 text-center text-slate-400 text-sm">
+              <Loader2 className="w-8 h-8 text-steam-accent animate-spin mx-auto mb-3" />
+              <p>Сканирование установленных игр в SteamLibrary...</p>
+            </div>
+          ) : filteredInstalled.length === 0 ? (
+            <div className="py-20 text-center bg-steam-card/40 rounded-2xl border border-steam-border p-8">
+              <Gamepad2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-sm text-slate-300 font-semibold">Игры не найдены</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Проверьте путь к библиотеке Steam в Настройках или сбросьте строку поиска.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {filteredInstalled.map((game, idx) => (
+                <div
+                  key={idx}
+                  className="group rounded-2xl bg-steam-card border border-steam-border/80 hover:border-steam-accent/60 overflow-hidden shadow-xl hover:shadow-steam-accent/10 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Header Image */}
+                    <div className="aspect-[460/215] bg-slate-900 relative overflow-hidden">
+                      {game.headerImage ? (
+                        <img
+                          src={game.headerImage}
+                          alt={game.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 text-slate-500 p-4 text-center">
+                          <Folder className="w-10 h-10 mb-1 text-slate-600" />
+                          <span className="text-xs font-bold text-slate-400 truncate max-w-full">
+                            {game.name}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                        {game.sizeFormatted && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-black/75 text-emerald-300 backdrop-blur-md border border-emerald-500/30">
+                            {game.sizeFormatted}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Game Metadata Info */}
+                    <div className="p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-sm text-white line-clamp-1 group-hover:text-steam-accent transition-colors">
+                          {game.name}
+                        </h3>
+                      </div>
+
+                      <div className="text-[11px] font-mono text-slate-400 truncate" title={game.displayPath}>
+                        📁 {game.displayPath}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        {game.isOfficialSteam ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-steam-blue/20 text-steam-blue border border-steam-blue/30">
+                            Steam AppID: {game.appId}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            Локальная игра
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="p-3 bg-steam-nav/60 border-t border-steam-border/60 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/admin/files?path=${encodeURIComponent(game.displayPath)}`)}
+                      className="flex-1 py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-steam-cardHover text-slate-200 border border-steam-border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      title="Открыть каталог игры в файловом менеджере"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 text-steam-cyan" />
+                      <span>Папка игры</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleImportToShortcut(game)}
+                      className="py-1.5 px-2.5 rounded-lg bg-steam-accent/15 hover:bg-steam-accent/25 text-steam-accent border border-steam-accent/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      title="Настроить Proton и создать ярлык"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Ярлык</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: NON-STEAM SHORTCUTS WIZARD & TABLE */}
+      {activeTab === 'shortcuts' && (
+        <div className="space-y-8">
+          {/* Main Wizard Form */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+            <div className="lg:col-span-2 space-y-6">
+              <form onSubmit={handleSaveToSteam} className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-steam-blue" />
+                  Параметры запуска новой игры
+                </h3>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Название игры (в библиотеке Steam) *
+                  </label>
+                  <input
+                    type="text"
+                    value={appName}
+                    onChange={(e) => setAppName(e.target.value)}
+                    placeholder="Например: Cyberpunk 2077"
+                    required
+                    className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Путь к исполняемому файлу (.exe / .sh) *
+                  </label>
+                  <input
+                    type="text"
+                    value={exePath}
+                    onChange={(e) => handleExeChange(e.target.value)}
                 placeholder="/host_root/games/Cyberpunk2077/bin/x64/Cyberpunk2077.exe"
                 required
                 className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
@@ -454,5 +697,7 @@ export const SteamLibrary: React.FC = () => {
         )}
       </div>
     </div>
+    )}
+  </div>
   );
 };
