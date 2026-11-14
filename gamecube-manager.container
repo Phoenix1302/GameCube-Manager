@@ -1,0 +1,24 @@
+[Unit]
+Description=GameCube-Manager Podman Quadlet Container
+After=network-online.target
+
+[Container]
+ContainerName=gamecube-manager
+Image=localhost/gamecube-manager:latest
+AutoUpdate=registry
+PublishPort=3000:3000
+Volume=/:/host_root:rslave
+Volume=/home/deck/.local/share/Steam/userdata:/host_root/home/deck/.local/share/Steam/userdata:rw
+Volume=gamecube-data:/app/backend/data:rw
+Environment=PORT=3000
+Environment=HOST_ROOT=/host_root
+Environment=STEAM_USERDATA_PATH=/host_root/home/deck/.local/share/Steam/userdata
+Environment=QBITTORRENT_URL=http://127.0.0.1:8080
+Network=host
+SecurityLabelDisable=true
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

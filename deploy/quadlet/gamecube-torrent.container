@@ -1,0 +1,15 @@
+[Unit]
+Description=GameCube-Manager Headless qBittorrent Container
+After=gamecube-pod.service
+Requires=gamecube-pod.service
+
+[Container]
+ContainerName=gamecube-torrent
+Pod=gamecube-pod.pod
+Image=localhost/gamecube-torrent:1.0.0
+Volume=gamecube-downloads:/downloads:rw
+Volume=gamecube-torrent-config:/config:rw
+SecurityLabelDisable=true
+
+[Service]
+Restart=always

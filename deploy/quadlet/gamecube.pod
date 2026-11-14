@@ -1,0 +1,13 @@
+[Unit]
+Description=GameCube-Manager Podman Pod (DIY Steam Machine)
+After=network-online.target
+
+[Pod]
+PodName=gamecube-pod
+PublishPort=80:80
+PublishPort=443:443
+PublishPort=6882:6882
+PublishPort=6882:6882/udp
+
+[Install]
+WantedBy=default.target

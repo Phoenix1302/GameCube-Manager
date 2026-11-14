@@ -1,0 +1,13 @@
+[Unit]
+Description=GameCube-Manager Nginx SSL Proxy Container
+After=gamecube-pod.service gamecube-web.service
+Requires=gamecube-pod.service
+
+[Container]
+ContainerName=gamecube-proxy
+Pod=gamecube-pod.pod
+Image=localhost/gamecube-proxy:1.0.0
+Volume=gamecube-certs:/etc/nginx/certs:rw
+
+[Service]
+Restart=always

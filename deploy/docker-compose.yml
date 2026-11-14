@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  gamecube-web:
+    image: localhost/gamecube-manager:1.0.0
+    container_name: gamecube-web
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - HOST_ROOT=/host_root
+      - STEAM_USERDATA_PATH=/host_root/home/deck/.local/share/Steam/userdata
+      - QBITTORRENT_URL=http://gamecube-torrent:8085
+    volumes:
+      - gamecube-data:/app/backend/data
+      - /:/host_root:ro
+    # Notice: port 3000 is NOT mapped to the host, only accessible within the internal network
+    expose:
+      - "3000"
+
+  gamecube-torrent:
+    image: localhost/gamecube-torrent:1.0.0
+    container_name: gamecube-torrent
+    restart: unless-stopped
+    volumes:
+      - gamecube-downloads:/downloads
+      - gamecube-torrent-config:/config
+    expose:
+      - "8085"
+      - "6882"
+
+  gamecube-proxy:
+    image: localhost/gamecube-proxy:1.0.0
+    container_name: gamecube-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - gamecube-certs:/etc/nginx/certs
+    depends_on:
+      - gamecube-web
+
+volumes:
+  gamecube-data:
+  gamecube-certs:
+  gamecube-downloads:
+  gamecube-torrent-config:

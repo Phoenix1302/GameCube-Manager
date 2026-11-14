@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gamecube-pod
+  labels:
+    app: gamecube-manager
+spec:
+  containers:
+  # 1. Web Application: Runs strictly on localhost inside the pod network
+  # Port 3000 is NOT published to the host, preventing direct unencrypted access.
+  - name: gamecube-web
+    image: localhost/gamecube-manager:1.0.0
+    env:
+    - name: PORT
+      value: "3000"
+    - name: HOST
+      value: "127.0.0.1"
+    - name: NODE_ENV
+      value: "production"
+    - name: HOST_ROOT
+      value: "/host_root"
+    - name: STEAM_USERDATA_PATH
+      value: "/host_root/home/deck/.local/share/Steam/userdata"
+    - name: QBITTORRENT_URL
+      value: "http://127.0.0.1:8085"
+    volumeMounts:
+    - name: gamecube-data
+      mountPath: /app/backend/data
+    - name: host-root
+      mountPath: /host_root
+
+  # 2. Headless qBittorrent: Runs strictly on internal localhost:8085 inside the pod network
+  - name: gamecube-torrent
+    image: localhost/gamecube-torrent:1.0.0
+    volumeMounts:
+    - name: gamecube-downloads
+      mountPath: /downloads
+    - name: gamecube-torrent-config
+      mountPath: /config
+
+  # 3. Nginx Reverse Proxy with SSL (Self-signed SAN certs, HTTP->HTTPS redirect & WebSocket)
+  - name: gamecube-proxy
+    image: localhost/gamecube-proxy:1.0.0
+    ports:
+    - containerPort: 80
+      hostPort: 80
+      protocol: TCP
+    - containerPort: 443
+      hostPort: 443
+      protocol: TCP
+    volumeMounts:
+    - name: nginx-certs
+      mountPath: /etc/nginx/certs
+
+  volumes:
+  - name: gamecube-data
+    emptyDir: {}
+  - name: gamecube-downloads
+    emptyDir: {}
+  - name: gamecube-torrent-config
+    emptyDir: {}
+  - name: nginx-certs
+    emptyDir: {}
+  - name: host-root
+    emptyDir: {}
