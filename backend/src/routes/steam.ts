@@ -404,6 +404,443 @@ function findSteamUserConfigDir(): { userDir: string; configDir: string; gridDir
   };
 }
 
+export interface DetectedExecutable {
+  path: string;
+  displayPath: string;
+  name: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  score: number;
+  isRecommended: boolean;
+}
+
+export function scanGameExecutables(gameDir: string): {
+  executables: DetectedExecutable[];
+  recommendedExe: string | null;
+  recommendedDisplayExe: string | null;
+  startDir: string;
+} {
+  const internalDir = toInternalPath(gameDir);
+  if (!fs.existsSync(internalDir)) {
+    return {
+      executables: [],
+      recommendedExe: null,
+      recommendedDisplayExe: null,
+      startDir: toCleanPath(gameDir),
+    };
+  }
+
+  const folderName = path.basename(gameDir).toLowerCase().replace(/[\s\-_()]/g, '');
+  const found: DetectedExecutable[] = [];
+
+  const ignoredDirs = new Set([
+    '_commonredist',
+    'directx',
+    'redist',
+    'support',
+    'installers',
+    'prerequisites',
+    'dotnet',
+    'crashreporter',
+    'crashhandler',
+    '.steam',
+    '.git',
+    'mono',
+    'easyanticheat',
+    'battleye',
+  ]);
+
+  const ignoredExePatterns = [
+    'unins',
+    'uninstall',
+    'dxsetup',
+    'dxwebsetup',
+    'oalinst',
+    'unitycrashhandler',
+    'crashreport',
+    'ue4prereq',
+    'ueprereq',
+    'easyanticheat',
+    'beservice',
+    '7z.exe',
+    'zip.exe',
+    'vcredist',
+    'vc_redist',
+  ];
+
+  function traverse(currentDir: string, depth: number) {
+    if (depth > 4) return;
+    try {
+      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          const lowerName = entry.name.toLowerCase();
+          if (!ignoredDirs.has(lowerName)) {
+            traverse(fullPath, depth + 1);
+          }
+        } else if (entry.isFile()) {
+          const lowerName = entry.name.toLowerCase();
+          const ext = path.extname(lowerName);
+          const isBinary = ['.exe', '.x86_64', '.sh', '.bin', '.appimage'].includes(ext);
+
+          if (isBinary) {
+            const isIgnored = ignoredExePatterns.some((ign) => lowerName.includes(ign));
+            if (!isIgnored) {
+              let sizeBytes = 0;
+              try {
+                sizeBytes = fs.statSync(fullPath).size;
+              } catch {}
+
+              let score = 0;
+              const cleanExe = lowerName.replace(/\.[^/.]+$/, '').replace(/[\s\-_()]/g, '');
+
+              // Match with folder name
+              if (cleanExe.includes(folderName) || folderName.includes(cleanExe)) {
+                score += 100;
+              }
+
+              if (lowerName.includes('shipping')) score += 40;
+              if (lowerName.includes('game')) score += 20;
+              if (lowerName.includes('launcher')) score += 10;
+
+              // Priority by depth
+              if (depth === 0) score += 30;
+              if (currentDir.toLowerCase().includes('bin') || currentDir.toLowerCase().includes('x64')) {
+                score += 25;
+              }
+
+              // Negative scoring for config/setup
+              if (lowerName.includes('config') || lowerName.includes('setup') || lowerName.includes('server')) {
+                score -= 50;
+              }
+
+              // Size bonus
+              if (sizeBytes > 10 * 1024 * 1024) score += 30;
+              else if (sizeBytes > 2 * 1024 * 1024) score += 15;
+              else if (sizeBytes < 500 * 1024) score -= 20;
+
+              found.push({
+                path: fullPath,
+                displayPath: toCleanPath(fullPath),
+                name: entry.name,
+                sizeBytes,
+                sizeFormatted: formatBytes(sizeBytes),
+                score,
+                isRecommended: false,
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  traverse(internalDir, 0);
+
+  // Sort candidates by score descending
+  found.sort((a, b) => b.score - a.score);
+
+  if (found.length > 0) {
+    found[0].isRecommended = true;
+  }
+
+  const recommended = found.length > 0 ? found[0] : null;
+  const startDir = recommended ? path.dirname(recommended.displayPath) : toCleanPath(gameDir);
+
+  return {
+    executables: found,
+    recommendedExe: recommended ? recommended.path : null,
+    recommendedDisplayExe: recommended ? recommended.displayPath : null,
+    startDir,
+  };
+}
+
+async function saveArtworkToSteamGrid(
+  gridDir: string,
+  appId: number,
+  type: 'poster' | 'banner' | 'hero' | 'logo',
+  sourceUrl: string
+): Promise<boolean> {
+  const shortId = String(appId);
+  const longId = ((BigInt(appId) << 32n) | 0x02000000n).toString();
+
+  let suffix = '';
+  switch (type) {
+    case 'poster':
+      suffix = 'p.png';
+      break;
+    case 'banner':
+      suffix = '.png';
+      break;
+    case 'hero':
+      suffix = '_hero.png';
+      break;
+    case 'logo':
+      suffix = '_logo.png';
+      break;
+  }
+
+  const primaryFile = path.join(gridDir, `${shortId}${suffix}`);
+  const secondaryFile = path.join(gridDir, `${longId}${suffix}`);
+
+  try {
+    const res = await axios.get(sourceUrl, { responseType: 'arraybuffer', timeout: 8000 });
+    if (res.status === 200 && res.data && res.data.length > 0) {
+      const buf = Buffer.from(res.data);
+      fs.writeFileSync(primaryFile, buf);
+      try {
+        fs.writeFileSync(secondaryFile, buf);
+      } catch {}
+      return true;
+    }
+  } catch (err: any) {
+    console.warn(`[SteamGrid] Failed to download ${type} from ${sourceUrl}:`, err.message);
+  }
+  return false;
+}
+
+async function autoCreateShortcut(params: {
+  appName: string;
+  gamePath: string;
+  exe?: string;
+  startDir?: string;
+  compatTool?: string;
+  launchOptions?: string;
+  installArtwork?: boolean;
+}) {
+  const steamPaths = findSteamUserConfigDir();
+  if (!steamPaths) {
+    throw new Error('Каталог Steam userdata не найден. Укажите путь в Настройках.');
+  }
+
+  // Ensure config & grid directories exist
+  if (!fs.existsSync(steamPaths.configDir)) {
+    fs.mkdirSync(steamPaths.configDir, { recursive: true });
+  }
+  if (!fs.existsSync(steamPaths.gridDir)) {
+    fs.mkdirSync(steamPaths.gridDir, { recursive: true });
+  }
+
+  // 1. Resolve executable and working directory
+  let cleanExe = params.exe;
+  let cleanStartDir = params.startDir;
+
+  if (!cleanExe) {
+    const scanResult = scanGameExecutables(params.gamePath);
+    if (!scanResult.recommendedDisplayExe) {
+      throw new Error(`Исполняемый файл (.exe / .sh) не найден в каталоге игры: ${params.gamePath}`);
+    }
+    cleanExe = scanResult.recommendedDisplayExe;
+    if (!cleanStartDir) {
+      cleanStartDir = scanResult.startDir;
+    }
+  }
+
+  if (!cleanStartDir) {
+    cleanStartDir = path.dirname(cleanExe);
+  }
+
+  // 2. Read existing shortcuts.vdf
+  let parsed: Record<string, any> = { shortcuts: {} };
+  if (fs.existsSync(steamPaths.shortcutsFile)) {
+    try {
+      const buf = fs.readFileSync(steamPaths.shortcutsFile);
+      parsed = parseBinaryVdf(buf);
+      if (!parsed.shortcuts) parsed.shortcuts = {};
+      fs.copyFileSync(steamPaths.shortcutsFile, `${steamPaths.shortcutsFile}.bak`);
+    } catch (err) {
+      console.warn('[Steam] Could not parse existing shortcuts.vdf, starting fresh');
+    }
+  }
+
+  const appId = generateSteamAppId(cleanExe, params.appName);
+
+  // Check if shortcut already exists in shortcuts.vdf
+  let existingKey: string | null = null;
+  for (const [k, v] of Object.entries(parsed.shortcuts)) {
+    if ((v as any).appid === appId || (v as any).AppName === params.appName) {
+      existingKey = k;
+      break;
+    }
+  }
+
+  const targetKey = existingKey || String(Object.keys(parsed.shortcuts).length);
+
+  const newShortcut: SteamShortcut = {
+    appid: appId,
+    AppName: params.appName,
+    Exe: `"${cleanExe}"`,
+    StartDir: `"${cleanStartDir}"`,
+    icon: '',
+    ShortcutPath: '',
+    LaunchOptions: params.launchOptions || 'gamemoderun %command%',
+    IsHidden: 0,
+    AllowDesktopConfig: 1,
+    AllowOverlay: 1,
+    OpenVR: 0,
+    Devkit: 0,
+    DevkitGameID: '',
+    DevkitOverrideAppID: 0,
+    LastPlayTime: 0,
+    FlatpakAppID: '',
+    tags: { '0': 'GameCube' },
+    compat_tool: params.compatTool || 'GE-Proton9-20',
+  };
+
+  parsed.shortcuts[targetKey] = newShortcut;
+  fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+
+  // 3. Download and install artwork if requested
+  const artworkStatus = {
+    poster: false,
+    banner: false,
+    hero: false,
+    logo: false,
+  };
+
+  if (params.installArtwork !== false) {
+    const steamAppId = resolveAppIdByName(params.appName);
+    if (steamAppId) {
+      // Try official Steam Store CDN assets
+      const posterCandidates = [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/library_600x900.jpg`,
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
+      ];
+      for (const url of posterCandidates) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', url)) {
+          artworkStatus.poster = true;
+          break;
+        }
+      }
+
+      const bannerCandidates = [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/header.jpg`,
+      ];
+      for (const url of bannerCandidates) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', url)) {
+          artworkStatus.banner = true;
+          break;
+        }
+      }
+
+      const heroCandidates = [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+      ];
+      for (const url of heroCandidates) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', url)) {
+          artworkStatus.hero = true;
+          break;
+        }
+      }
+
+      const logoCandidates = [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+      ];
+      for (const url of logoCandidates) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', url)) {
+          artworkStatus.logo = true;
+          break;
+        }
+      }
+    }
+
+    // Try SteamGridDB if API key is present and any artwork is still missing
+    const sgdbKey = getSteamGridDbKey();
+    if (
+      sgdbKey &&
+      (!artworkStatus.poster || !artworkStatus.banner || !artworkStatus.hero || !artworkStatus.logo)
+    ) {
+      try {
+        const cleanQuery = params.appName.replace(/\s*\([^)]*\)/g, '').trim();
+        const searchRes = await axios.get(
+          `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(cleanQuery)}`,
+          {
+            headers: { Authorization: `Bearer ${sgdbKey}` },
+            timeout: 5000,
+          }
+        );
+
+        const firstGame = searchRes.data?.data?.[0];
+        if (firstGame?.id) {
+          const gameId = firstGame.id;
+          const headers = { Authorization: `Bearer ${sgdbKey}` };
+
+          if (!artworkStatus.poster) {
+            try {
+              const gridsRes = await axios.get(
+                `https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=600x900`,
+                { headers, timeout: 5000 }
+              );
+              const imgUrl = gridsRes.data?.data?.[0]?.url;
+              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', imgUrl))) {
+                artworkStatus.poster = true;
+              }
+            } catch {}
+          }
+
+          if (!artworkStatus.banner) {
+            try {
+              const bannersRes = await axios.get(
+                `https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=460x215,920x430`,
+                { headers, timeout: 5000 }
+              );
+              const imgUrl = bannersRes.data?.data?.[0]?.url;
+              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', imgUrl))) {
+                artworkStatus.banner = true;
+              }
+            } catch {}
+          }
+
+          if (!artworkStatus.hero) {
+            try {
+              const heroesRes = await axios.get(`https://www.steamgriddb.com/api/v2/heroes/game/${gameId}`, {
+                headers,
+                timeout: 5000,
+              });
+              const imgUrl = heroesRes.data?.data?.[0]?.url;
+              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', imgUrl))) {
+                artworkStatus.hero = true;
+              }
+            } catch {}
+          }
+
+          if (!artworkStatus.logo) {
+            try {
+              const logosRes = await axios.get(`https://www.steamgriddb.com/api/v2/logos/game/${gameId}`, {
+                headers,
+                timeout: 5000,
+              });
+              const imgUrl = logosRes.data?.data?.[0]?.url;
+              if (imgUrl && (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', imgUrl))) {
+                artworkStatus.logo = true;
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return {
+    success: true,
+    appId,
+    appName: params.appName,
+    exe: cleanExe,
+    startDir: cleanStartDir,
+    compatTool: newShortcut.compat_tool,
+    artwork: artworkStatus,
+    message: `Ярлык «${params.appName}» и все обложки успешно добавлены в Steam!`,
+  };
+}
+
 export async function steamRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
 
@@ -564,6 +1001,104 @@ export async function steamRoutes(fastify: FastifyInstance) {
       shortcut: newShortcut,
       shortcutsFile: steamPaths.shortcutsFile,
     };
+  });
+
+  // Scan folder for executable candidates (.exe, .sh, .bin, .AppImage)
+  fastify.get('/scan-executables', async (request, reply) => {
+    const { path: dirPath } = request.query as { path?: string };
+    if (!dirPath) {
+      return reply.status(400).send({ error: 'path parameter is required' });
+    }
+
+    try {
+      const result = scanGameExecutables(dirPath);
+      return result;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to scan executables: ${err.message}` });
+    }
+  });
+
+  // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos)
+  fastify.post('/shortcuts/auto-create', async (request, reply) => {
+    const {
+      appName,
+      gamePath,
+      exe,
+      startDir,
+      compatTool,
+      launchOptions,
+      installArtwork = true,
+    } = request.body as {
+      appName?: string;
+      gamePath?: string;
+      exe?: string;
+      startDir?: string;
+      compatTool?: string;
+      launchOptions?: string;
+      installArtwork?: boolean;
+    };
+
+    if (!appName && !gamePath) {
+      return reply.status(400).send({ error: 'appName or gamePath is required' });
+    }
+
+    const resolvedAppName = appName || (gamePath ? path.basename(gamePath) : 'Unknown Game');
+    const resolvedGamePath = gamePath || (exe ? path.dirname(exe) : '');
+
+    try {
+      const result = await autoCreateShortcut({
+        appName: resolvedAppName,
+        gamePath: resolvedGamePath,
+        exe,
+        startDir,
+        compatTool,
+        launchOptions,
+        installArtwork,
+      });
+
+      return result;
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // Delete shortcut from shortcuts.vdf
+  fastify.delete('/shortcuts/:appId', async (request, reply) => {
+    const { appId } = request.params as { appId: string };
+    const targetId = parseInt(appId, 10);
+    const steamPaths = findSteamUserConfigDir();
+    if (!steamPaths || !fs.existsSync(steamPaths.shortcutsFile)) {
+      return reply.status(404).send({ error: 'shortcuts.vdf not found' });
+    }
+
+    try {
+      const buf = fs.readFileSync(steamPaths.shortcutsFile);
+      const parsed = parseBinaryVdf(buf);
+      const rawShortcuts = parsed.shortcuts || {};
+
+      let found = false;
+      const newShortcuts: Record<string, any> = {};
+      let newIdx = 0;
+
+      for (const [k, v] of Object.entries(rawShortcuts)) {
+        if ((v as any).appid === targetId) {
+          found = true;
+          continue;
+        }
+        newShortcuts[String(newIdx++)] = v;
+      }
+
+      if (!found) {
+        return reply.status(404).send({ error: 'Shortcut not found in shortcuts.vdf' });
+      }
+
+      parsed.shortcuts = newShortcuts;
+      fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+
+      return { message: 'Ярлык успешно удален из Steam', appId: targetId };
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to remove shortcut: ${err.message}` });
+    }
   });
 
   // SteamGridDB: Search games

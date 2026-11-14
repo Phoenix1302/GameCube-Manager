@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   FolderSync,
@@ -19,6 +20,11 @@ import {
   ArrowUpRight,
   RefreshCw,
   Folder,
+  Trash2,
+  X,
+  Check,
+  FileCode,
+  Settings2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { SteamShortcut, SteamGridAsset } from '../types';
@@ -38,6 +44,23 @@ export const SteamLibrary: React.FC = () => {
   // Existing shortcuts
   const [shortcuts, setShortcuts] = useState<SteamShortcut[]>([]);
   const [loadingShortcuts, setLoadingShortcuts] = useState(true);
+
+  // Smart Add to Steam Modal state
+  const [smartModalOpen, setSmartModalOpen] = useState(false);
+  const [modalGame, setModalGame] = useState<any | null>(null);
+  const [modalAppName, setModalAppName] = useState('');
+  const [modalGamePath, setModalGamePath] = useState('');
+  const [modalSelectedExe, setModalSelectedExe] = useState('');
+  const [modalStartDir, setModalStartDir] = useState('');
+  const [modalCompatTool, setModalCompatTool] = useState('GE-Proton9-20');
+  const [modalLaunchOptions, setModalLaunchOptions] = useState('gamemoderun %command%');
+  const [modalInstallArtwork, setModalInstallArtwork] = useState(true);
+  const [scanningExes, setScanningExes] = useState(false);
+  const [detectedExes, setDetectedExes] = useState<
+    Array<{ path: string; displayPath: string; name: string; sizeFormatted: string; isRecommended: boolean }>
+  >([]);
+  const [submittingSmartAdd, setSubmittingSmartAdd] = useState(false);
+  const [showManualExeInput, setShowManualExeInput] = useState(false);
 
   // New shortcut wizard form
   const [appName, setAppName] = useState('');
@@ -236,12 +259,106 @@ export const SteamLibrary: React.FC = () => {
     }
   };
 
+  const isGameInSteam = (game: any): boolean => {
+    return shortcuts.some((s) => {
+      const sName = (s.AppName || '').toLowerCase().trim();
+      const gName = (game.name || '').toLowerCase().trim();
+      const sExe = (s.Exe || '').toLowerCase();
+      const gDir = (game.installDir || '').toLowerCase();
+      return sName === gName || (gDir && sExe.includes(gDir));
+    });
+  };
+
+  const openSmartModal = async (game?: any) => {
+    setModalGame(game || null);
+    setShowManualExeInput(false);
+    const initialName = game ? game.name : '';
+    const initialPath = game ? game.fullPath || game.displayPath : '/mnt/game_data';
+    setModalAppName(initialName);
+    setModalGamePath(initialPath);
+    setModalCompatTool('GE-Proton9-20');
+    setModalLaunchOptions('gamemoderun %command%');
+    setModalInstallArtwork(true);
+    setSmartModalOpen(true);
+
+    if (game) {
+      await scanExecutablesForPath(initialPath);
+    } else {
+      setDetectedExes([]);
+      setModalSelectedExe('');
+      setModalStartDir('');
+    }
+  };
+
+  const scanExecutablesForPath = async (dirPath: string) => {
+    if (!dirPath || dirPath.trim().length === 0) return;
+    try {
+      setScanningExes(true);
+      const res = await api.get('/steam/scan-executables', { params: { path: dirPath.trim() } });
+      const exes = res.data.executables || [];
+      setDetectedExes(exes);
+      if (res.data.recommendedDisplayExe) {
+        setModalSelectedExe(res.data.recommendedDisplayExe);
+      } else if (exes.length > 0) {
+        setModalSelectedExe(exes[0].displayPath);
+      } else {
+        setModalSelectedExe('');
+        setShowManualExeInput(true);
+      }
+      setModalStartDir(res.data.startDir || dirPath);
+    } catch (err: any) {
+      console.warn('Scan executables error', err);
+      setShowManualExeInput(true);
+    } finally {
+      setScanningExes(false);
+    }
+  };
+
+  const handleSmartAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalAppName.trim() || !modalSelectedExe.trim()) {
+      alert('Укажите название игры и исполняемый файл');
+      return;
+    }
+
+    try {
+      setSubmittingSmartAdd(true);
+      await api.post('/steam/shortcuts/auto-create', {
+        appName: modalAppName.trim(),
+        gamePath: modalGamePath.trim(),
+        exe: modalSelectedExe.trim(),
+        startDir: modalStartDir.trim() || undefined,
+        compatTool: modalCompatTool,
+        launchOptions: modalLaunchOptions,
+        installArtwork: modalInstallArtwork,
+      });
+
+      setSuccessMsg(`Ярлык «${modalAppName}» и все обложки успешно добавлены в Steam!`);
+      setSmartModalOpen(false);
+      loadShortcuts();
+      setTimeout(() => setSuccessMsg(null), 6000);
+    } catch (err: any) {
+      alert(`Ошибка добавления в Steam: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setSubmittingSmartAdd(false);
+    }
+  };
+
+  const handleDeleteShortcut = async (appId?: number, name?: string) => {
+    if (!appId) return;
+    if (!window.confirm(`Удалить ярлык «${name || appId}» из Steam?`)) return;
+    try {
+      await api.delete(`/steam/shortcuts/${appId}`);
+      loadShortcuts();
+      setSuccessMsg(`Ярлык «${name || appId}» удален из shortcuts.vdf`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      alert(`Ошибка удаления ярлыка: ${err.response?.data?.error || err.message}`);
+    }
+  };
+
   const handleImportToShortcut = (game: any) => {
-    setAppName(game.name);
-    setStartDir(game.displayPath);
-    setExePath(game.displayPath);
-    setGridSearchTerm(game.name);
-    setActiveTab('shortcuts');
+    openSmartModal(game);
   };
 
   const filteredInstalled = installedGames.filter(
@@ -263,9 +380,18 @@ export const SteamLibrary: React.FC = () => {
           </p>
         </div>
 
-        {libraries.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {libraries.map((lib, idx) => (
+        <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => openSmartModal()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Добавить стороннюю игру</span>
+          </button>
+
+          {libraries.length > 0 &&
+            libraries.map((lib, idx) => (
               <button
                 key={idx}
                 type="button"
@@ -282,8 +408,7 @@ export const SteamLibrary: React.FC = () => {
                 </span>
               </button>
             ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Tabs navigation */}
@@ -467,15 +592,37 @@ export const SteamLibrary: React.FC = () => {
                       <span>Папка игры</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleImportToShortcut(game)}
-                      className="py-1.5 px-2.5 rounded-lg bg-steam-accent/15 hover:bg-steam-accent/25 text-steam-accent border border-steam-accent/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                      title="Настроить Proton и создать ярлык"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Ярлык</span>
-                    </button>
+                    {(() => {
+                      const alreadyInSteam = isGameInSteam(game);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openSmartModal(game)}
+                          className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                            alreadyInSteam
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-steam-blue hover:bg-steam-blueHover text-white shadow-blue-500/20'
+                          }`}
+                          title={
+                            alreadyInSteam
+                              ? 'Игра уже добавлена в shortcuts.vdf (нажмите для редактирования или обновления обложек)'
+                              : 'Создать ярлык и установить обложки в Steam в 1 клик'
+                          }
+                        >
+                          {alreadyInSteam ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>В Steam</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-steam-cyan" />
+                              <span>+ В Steam</span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -691,6 +838,7 @@ export const SteamLibrary: React.FC = () => {
                   <th className="px-4 py-3">Исполняемый файл</th>
                   <th className="px-4 py-3">Параметры запуска</th>
                   <th className="px-4 py-3">AppID</th>
+                  <th className="px-4 py-3 text-right">Действия</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-steam-border/50">
@@ -706,6 +854,16 @@ export const SteamLibrary: React.FC = () => {
                     <td className="px-4 py-3.5 font-mono text-xs text-steam-accent">
                       {s.appid || '—'}
                     </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteShortcut(s.appid, s.AppName)}
+                        className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
+                        title="Удалить ярлык из Steam"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -715,6 +873,253 @@ export const SteamLibrary: React.FC = () => {
       </div>
     </div>
     )}
+
+      {/* Smart Add to Steam Modal */}
+      {smartModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          onClick={() => setSmartModalOpen(false)}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl my-auto bg-steam-card border border-steam-border/90 rounded-2xl shadow-2xl p-5 sm:p-6 relative text-left"
+          >
+            <button
+              onClick={() => setSmartModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5 pr-8">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-steam-blue to-steam-cyan flex items-center justify-center text-white shadow-md shadow-blue-500/25 flex-shrink-0">
+                <Gamepad2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Добавление игры в Steam (Game Mode)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Создание ярлыка в shortcuts.vdf, автопоиск .exe, настройка Proton и скачивание обложек.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSmartAddSubmit} className="space-y-4">
+              {/* Game Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Название игры (в интерфейсе Steam) *
+                </label>
+                <input
+                  type="text"
+                  value={modalAppName}
+                  onChange={(e) => setModalAppName(e.target.value)}
+                  placeholder="Например: Dead Space (2023)"
+                  required
+                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
+              </div>
+
+              {/* Game Directory & Scanner */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Каталог с файлами игры *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => scanExecutablesForPath(modalGamePath)}
+                    disabled={scanningExes || !modalGamePath.trim()}
+                    className="text-[11px] font-semibold text-steam-cyan hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${scanningExes ? 'animate-spin' : ''}`} />
+                    <span>Сканировать .exe</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={modalGamePath}
+                  onChange={(e) => setModalGamePath(e.target.value)}
+                  onBlur={() => {
+                    if (modalGamePath.trim()) scanExecutablesForPath(modalGamePath.trim());
+                  }}
+                  placeholder="/mnt/game_data/SteamLibrary/steamapps/common/Dead Space (2023)"
+                  required
+                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                />
+              </div>
+
+              {/* Detected Executables */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Исполняемый файл запуска (.exe / .sh) *
+                </label>
+                {scanningExes ? (
+                  <div className="p-3 rounded-xl bg-steam-nav border border-steam-border text-xs text-slate-400 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-steam-cyan animate-spin" />
+                    <span>Поиск исполняемых файлов (.exe / .sh) в каталоге игры...</span>
+                  </div>
+                ) : detectedExes.length > 0 && !showManualExeInput ? (
+                  <div className="space-y-2">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        <span className="text-xs font-medium text-emerald-300 truncate font-mono">
+                          {modalSelectedExe.split('/').pop() || modalSelectedExe}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 flex-shrink-0">
+                        Автоопределен
+                      </span>
+                    </div>
+
+                    {detectedExes.length > 1 && (
+                      <div>
+                        <select
+                          value={modalSelectedExe}
+                          onChange={(e) => setModalSelectedExe(e.target.value)}
+                          className="w-full bg-steam-nav text-slate-200 text-xs rounded-xl px-3 py-2 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                        >
+                          {detectedExes.map((exe, idx) => (
+                            <option key={idx} value={exe.displayPath}>
+                              {exe.name} ({exe.sizeFormatted}) {exe.isRecommended ? '— Рекомендуется' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualExeInput(true)}
+                        className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
+                      >
+                        Указать путь вручную
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      value={modalSelectedExe}
+                      onChange={(e) => setModalSelectedExe(e.target.value)}
+                      placeholder="/mnt/game_data/SteamLibrary/steamapps/common/Dead Space (2023)/Dead Space.exe"
+                      required
+                      className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                    />
+                    {detectedExes.length > 0 && (
+                      <div className="flex justify-end mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowManualExeInput(false)}
+                          className="text-[11px] text-steam-cyan hover:underline cursor-pointer"
+                        >
+                          Вернуться к найденным файлам ({detectedExes.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Compatibility Tool (Proton) & Launch Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Совместимость Proton
+                  </label>
+                  <select
+                    value={modalCompatTool}
+                    onChange={(e) => setModalCompatTool(e.target.value)}
+                    className="w-full bg-steam-nav text-slate-100 text-xs rounded-xl px-3 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                  >
+                    <option value="GE-Proton9-20">GE-Proton9-20 (Рекомендуется)</option>
+                    <option value="Proton Experimental">Proton Experimental</option>
+                    <option value="Proton 9.0">Proton 9.0</option>
+                    <option value="Proton 8.0">Proton 8.0</option>
+                    <option value="Proton Hotfix">Proton Hotfix</option>
+                    <option value="Wine-GE-latest">Wine-GE</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Параметры запуска
+                  </label>
+                  <input
+                    type="text"
+                    value={modalLaunchOptions}
+                    onChange={(e) => setModalLaunchOptions(e.target.value)}
+                    placeholder="gamemoderun %command%"
+                    className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Artwork auto-download toggle */}
+              <div className="p-3 rounded-xl bg-steam-nav border border-steam-border/80">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={modalInstallArtwork}
+                    onChange={(e) => setModalInstallArtwork(e.target.checked)}
+                    className="mt-0.5 rounded border-steam-border text-steam-blue focus:ring-0"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-200">
+                      Автоматически установить полный набор обложек
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Скачает вертикальный постер (600x900), баннер (460x215), фоновый арт Hero (1920x620) и логотип в папку grid Steam.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Hint */}
+              <div className="p-2.5 rounded-xl bg-steam-blue/10 border border-steam-blue/20 text-[11px] text-slate-300 flex items-start gap-2">
+                <Info className="w-4 h-4 text-steam-cyan flex-shrink-0 mt-0.5" />
+                <span>
+                  После добавления перезапустите клиент Steam или переключитесь в Game Mode, чтобы новая игра появилась в вашей библиотеке.
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSmartModalOpen(false)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-medium text-slate-300 bg-steam-nav hover:bg-steam-cardHover text-center cursor-pointer"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingSmartAdd || !modalAppName.trim() || !modalSelectedExe.trim()}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 shadow-lg shadow-cyan-500/20 disabled:opacity-50 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {submittingSmartAdd ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Создание ярлыка и загрузка обложек...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Gamepad2 className="w-4 h-4" />
+                      <span>Добавить в Steam и применить обложки</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
   </div>
   );
 };
