@@ -56,8 +56,8 @@ export const SteamLibrary: React.FC = () => {
   const [modalGamePath, setModalGamePath] = useState('');
   const [modalSelectedExe, setModalSelectedExe] = useState('');
   const [modalStartDir, setModalStartDir] = useState('');
-  const [modalCompatTool, setModalCompatTool] = useState('GE-Proton9-20');
-  const [modalLaunchOptions, setModalLaunchOptions] = useState('gamemoderun %command%');
+  const [modalCompatTool, setModalCompatTool] = useState('proton_experimental');
+  const [modalLaunchOptions, setModalLaunchOptions] = useState('');
   const [modalInstallArtwork, setModalInstallArtwork] = useState(true);
   const [scanningExes, setScanningExes] = useState(false);
   const [detectedExes, setDetectedExes] = useState<
@@ -92,8 +92,8 @@ export const SteamLibrary: React.FC = () => {
   const [appName, setAppName] = useState('');
   const [exePath, setExePath] = useState('');
   const [startDir, setStartDir] = useState('');
-  const [launchOptions, setLaunchOptions] = useState('gamemoderun %command%');
-  const [compatTool, setCompatTool] = useState('GE-Proton9-20');
+  const [launchOptions, setLaunchOptions] = useState('');
+  const [compatTool, setCompatTool] = useState('proton_experimental');
 
   // SteamGridDB search & assets
   const [gridSearchTerm, setGridSearchTerm] = useState('');
@@ -356,8 +356,8 @@ export const SteamLibrary: React.FC = () => {
     setModalAppName(initialName);
     setArtworkSearchQuery(initialName);
     setModalGamePath(initialPath);
-    setModalCompatTool('GE-Proton9-20');
-    setModalLaunchOptions('gamemoderun %command%');
+    setModalCompatTool('proton_experimental');
+    setModalLaunchOptions('');
     setModalInstallArtwork(true);
     setModalArtworkTab('poster');
     setSelectedModalPoster(null);
@@ -438,7 +438,14 @@ export const SteamLibrary: React.FC = () => {
           : undefined,
       });
 
-      setSuccessMsg(`Ярлык «${modalAppName}» и все обложки успешно добавлены в Steam!`);
+      // Automatically restart Steam so SteamOS reloads on the fly
+      try {
+        await api.post('/steam/restart-steam');
+      } catch (restartErr) {
+        console.warn('Auto restart steam error:', restartErr);
+      }
+
+      setSuccessMsg(`Ярлык «${modalAppName}» и обложки успешно добавлены! Steam перезапускается для обновления библиотеки.`);
       setSmartModalOpen(false);
       loadShortcuts();
       setTimeout(() => setSuccessMsg(null), 6000);
@@ -871,7 +878,7 @@ export const SteamLibrary: React.FC = () => {
                   type="text"
                   value={launchOptions}
                   onChange={(e) => setLaunchOptions(e.target.value)}
-                  placeholder="gamemoderun %command%"
+                  placeholder="Опционально (по умолчанию пусто)"
                   className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                 />
               </div>
@@ -887,11 +894,11 @@ export const SteamLibrary: React.FC = () => {
                 onChange={(e) => setCompatTool(e.target.value)}
                 className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
               >
-                <option value="GE-Proton9-20">GE-Proton9-20 (Рекомендуется для пираток и игр с видеороликами)</option>
-                <option value="Proton Experimental">Proton Experimental (Официальный Steam)</option>
-                <option value="Proton 9.0">Proton 9.0</option>
-                <option value="Proton 8.0">Proton 8.0</option>
-                <option value="Proton Hotfix">Proton Hotfix</option>
+                <option value="proton_experimental">Proton Experimental (По умолчанию)</option>
+                <option value="GE-Proton9-20">GE-Proton9-20 (Custom GE)</option>
+                <option value="proton_9">Proton 9.0</option>
+                <option value="proton_8">Proton 8.0</option>
+                <option value="proton_hotfix">Proton Hotfix</option>
                 <option value="Wine-GE-latest">Wine-GE (Native Wine)</option>
               </select>
             </div>
@@ -1236,11 +1243,11 @@ export const SteamLibrary: React.FC = () => {
                     onChange={(e) => setModalCompatTool(e.target.value)}
                     className="w-full bg-steam-nav text-slate-100 text-xs rounded-xl px-3 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
                   >
-                    <option value="GE-Proton9-20">GE-Proton9-20 (Рекомендуется)</option>
-                    <option value="Proton Experimental">Proton Experimental</option>
-                    <option value="Proton 9.0">Proton 9.0</option>
-                    <option value="Proton 8.0">Proton 8.0</option>
-                    <option value="Proton Hotfix">Proton Hotfix</option>
+                    <option value="proton_experimental">Proton Experimental (По умолчанию)</option>
+                    <option value="GE-Proton9-20">GE-Proton9-20 (Custom GE)</option>
+                    <option value="proton_9">Proton 9.0</option>
+                    <option value="proton_8">Proton 8.0</option>
+                    <option value="proton_hotfix">Proton Hotfix</option>
                     <option value="Wine-GE-latest">Wine-GE</option>
                   </select>
                 </div>
@@ -1253,7 +1260,7 @@ export const SteamLibrary: React.FC = () => {
                     type="text"
                     value={modalLaunchOptions}
                     onChange={(e) => setModalLaunchOptions(e.target.value)}
-                    placeholder="gamemoderun %command%"
+                    placeholder="Опционально (по умолчанию пусто)"
                     className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                   />
                 </div>

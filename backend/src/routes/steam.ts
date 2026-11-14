@@ -479,30 +479,99 @@ function findSteamUserConfigDir(): SteamUserConfigDir | null {
   return allDirs[0];
 }
 
-function applyCompatToolMapping(appId: number, toolName: string) {
+export function normalizeCompatTool(tool?: string): string {
+  if (!tool) return 'proton_experimental';
+  const lower = tool.toLowerCase().trim();
+  if (lower.includes('experimental')) return 'proton_experimental';
+  if (lower.includes('9.0') || lower.includes('proton-9') || lower === 'proton_9') return 'proton_9';
+  if (lower.includes('8.0') || lower.includes('proton-8') || lower === 'proton_8') return 'proton_8';
+  if (lower.includes('7.0') || lower.includes('proton-7') || lower === 'proton_7') return 'proton_7';
+  if (lower.includes('hotfix')) return 'proton_hotfix';
+  return tool;
+}
+
+function getSteamConfigFiles(): string[] {
+  const rawUserdataDir = getSteamUserdataDir();
+  const internalUserdata = toInternalPath(rawUserdataDir);
+  const internalSteamDir = path.dirname(internalUserdata);
+
+  const files = new Set<string>();
+
+  // Global config.vdf
+  files.add(path.join(internalSteamDir, 'config', 'config.vdf'));
+  files.add('/host_root/home/gamecube/.local/share/Steam/config/config.vdf');
+  files.add('/host_root/home/gamecube/.steam/steam/config/config.vdf');
+  files.add('/home/gamecube/.local/share/Steam/config/config.vdf');
+  files.add('/host_root/home/deck/.local/share/Steam/config/config.vdf');
+
+  // User-specific config and localconfig
+  const allUserDirs = findAllSteamUserConfigDirs();
+  for (const u of allUserDirs) {
+    files.add(path.join(u.configDir, 'localconfig.vdf'));
+    files.add(path.join(u.configDir, 'config.vdf'));
+  }
+
+  return Array.from(files).filter((f) => fs.existsSync(f));
+}
+
+function updateCompatToolInVdf(filePath: string, appId: number, toolName: string) {
   try {
-    const rawUserdataDir = getSteamUserdataDir();
-    const internalSteamDir = path.dirname(toInternalPath(rawUserdataDir));
-    const configVdfPath = path.join(internalSteamDir, 'config', 'config.vdf');
+    let content = fs.readFileSync(filePath, 'utf-8');
+    const appIdStr = String(appId);
 
-    if (!fs.existsSync(configVdfPath)) return;
+    // Global cleanup of invalid display names in existing CompatToolMapping
+    content = content.replace(/"name"\s+"Proton Experimental"/g, '"name"\t\t"proton_experimental"');
+    content = content.replace(/"name"\s+"Proton 9\.0"/g, '"name"\t\t"proton_9"');
+    content = content.replace(/"name"\s+"Proton 8\.0"/g, '"name"\t\t"proton_8"');
+    content = content.replace(/"name"\s+"Proton Hotfix"/g, '"name"\t\t"proton_hotfix"');
 
-    let content = fs.readFileSync(configVdfPath, 'utf-8');
-    const mappingEntry = `\t\t\t\t\t"${appId}"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"${toolName}"\n\t\t\t\t\t\t"config"\t\t""\n\t\t\t\t\t\t"priority"\t\t"250"\n\t\t\t\t\t}`;
-
-    if (content.includes(`"${appId}"`)) {
+    // 1. If this appId already exists in the file, update its "name" property
+    const appRegex = new RegExp(`("${appIdStr}"\\s*\\{[\\s\\S]*?"name"\\s+")[^"]*(")`);
+    if (appRegex.test(content)) {
+      content = content.replace(appRegex, `$1${toolName}$2`);
+      fs.writeFileSync(filePath, content, 'utf-8');
       return;
     }
 
-    if (content.includes('"CompatToolMapping"')) {
+    // 2. Otherwise insert new entry into CompatToolMapping
+    const newEntry = `\n\t\t\t\t\t"${appIdStr}"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"${toolName}"\n\t\t\t\t\t\t"config"\t\t""\n\t\t\t\t\t\t"priority"\t\t"250"\n\t\t\t\t\t}`;
+
+    if (/"CompatToolMapping"\s*\{/i.test(content)) {
+      content = content.replace(/("CompatToolMapping"\s*\{)/i, `$1${newEntry}`);
+      fs.writeFileSync(filePath, content, 'utf-8');
+    } else if (/"Steam"\s*\{/i.test(content)) {
       content = content.replace(
-        /"CompatToolMapping"\s*\{/,
-        `"CompatToolMapping"\n\t\t\t\t{\n${mappingEntry}`
+        /("Steam"\s*\{)/i,
+        `$1\n\t\t\t\t"CompatToolMapping"\n\t\t\t\t{${newEntry}\n\t\t\t\t}`
       );
-      fs.writeFileSync(configVdfPath, content, 'utf-8');
+      fs.writeFileSync(filePath, content, 'utf-8');
     }
   } catch (err: any) {
-    console.warn('[Steam] Could not apply Proton mapping in config.vdf:', err.message);
+    console.warn(`[Steam] Failed to write Proton mapping to ${filePath}:`, err.message);
+  }
+}
+
+function applyCompatToolMapping(appId: number, toolName: string) {
+  const normalizedTool = normalizeCompatTool(toolName);
+  const files = getSteamConfigFiles();
+  for (const file of files) {
+    updateCompatToolInVdf(file, appId, normalizedTool);
+  }
+}
+
+function removeCompatToolMapping(appId: number) {
+  const appIdStr = String(appId);
+  const files = getSteamConfigFiles();
+  const appBlockRegex = new RegExp(`[\\t ]*"${appIdStr}"\\s*\\{[\\s\\S]*?\\}\\r?\\n?`, 'g');
+
+  for (const file of files) {
+    try {
+      let content = fs.readFileSync(file, 'utf-8');
+      if (content.includes(`"${appIdStr}"`)) {
+        content = content.replace(appBlockRegex, '');
+        fs.writeFileSync(file, content, 'utf-8');
+      }
+    } catch {}
   }
 }
 
@@ -940,7 +1009,7 @@ async function autoCreateShortcut(params: {
   }
 
   const appId = generateSteamAppId(cleanExe, params.appName);
-  const compatTool = params.compatTool || 'GE-Proton9-20';
+  const compatTool = normalizeCompatTool(params.compatTool || 'proton_experimental');
 
   const newShortcut: SteamShortcut = {
     appid: appId,
@@ -949,7 +1018,7 @@ async function autoCreateShortcut(params: {
     StartDir: `"${cleanStartDir}"`,
     icon: '',
     ShortcutPath: '',
-    LaunchOptions: params.launchOptions || 'gamemoderun %command%',
+    LaunchOptions: params.launchOptions || '',
     IsHidden: 0,
     AllowDesktopConfig: 1,
     AllowOverlay: 1,
@@ -960,6 +1029,7 @@ async function autoCreateShortcut(params: {
     LastPlayTime: 0,
     FlatpakAppID: '',
     tags: { '0': 'GameCube' },
+    compat_tool: compatTool,
   };
 
   // 2. Write shortcut to EVERY discovered Steam user directory
@@ -1252,6 +1322,26 @@ export async function steamRoutes(fastify: FastifyInstance) {
 
       const shortcuts: SteamShortcut[] = Object.values(rawShortcuts);
 
+      // Auto-repair / normalize any existing CompatToolMapping entries in config.vdf & localconfig.vdf
+      const files = getSteamConfigFiles();
+      for (const file of files) {
+        try {
+          let content = fs.readFileSync(file, 'utf-8');
+          let modified = false;
+          if (content.includes('"Proton Experimental"')) {
+            content = content.replace(/"name"\s+"Proton Experimental"/g, '"name"\t\t"proton_experimental"');
+            modified = true;
+          }
+          if (content.includes('"Proton 9.0"')) {
+            content = content.replace(/"name"\s+"Proton 9\.0"/g, '"name"\t\t"proton_9"');
+            modified = true;
+          }
+          if (modified) {
+            fs.writeFileSync(file, content, 'utf-8');
+          }
+        } catch {}
+      }
+
       return {
         found: true,
         shortcutsFile: steamPaths.shortcutsFile,
@@ -1326,6 +1416,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
       });
     }
 
+    const chosenTool = normalizeCompatTool(compatTool || 'proton_experimental');
+
     const newShortcut: SteamShortcut = {
       appid: appId,
       AppName: appName,
@@ -1344,13 +1436,16 @@ export async function steamRoutes(fastify: FastifyInstance) {
       LastPlayTime: 0,
       FlatpakAppID: '',
       tags: formattedTags,
-      compat_tool: compatTool || 'Proton Experimental',
+      compat_tool: chosenTool,
     };
 
     parsed.shortcuts[String(existingIndex)] = newShortcut;
 
     const newBuffer = serializeBinaryVdf(parsed);
     fs.writeFileSync(steamPaths.shortcutsFile, newBuffer);
+
+    // Apply Proton compatibility mapping
+    applyCompatToolMapping(appId, chosenTool);
 
     return {
       message: 'Shortcut added successfully',
@@ -1440,6 +1535,20 @@ export async function steamRoutes(fastify: FastifyInstance) {
         customArtwork,
       });
 
+      // Automatically trigger reload in SteamOS on the fly
+      if (!config.isWindows) {
+        try {
+          execSync('chroot /host_root steam -shutdown 2>/dev/null || true', { timeout: 2000, stdio: 'ignore' });
+          execSync(
+            'chroot /host_root pkill -15 -f "/steam" 2>/dev/null || ' +
+            'chroot /host_root pkill -15 -x steam 2>/dev/null || ' +
+            'pkill -15 -f "/steam" 2>/dev/null || ' +
+            'pkill -15 -x steam 2>/dev/null || true',
+            { timeout: 2000, stdio: 'ignore' }
+          );
+        } catch {}
+      }
+
       return result;
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
@@ -1499,6 +1608,9 @@ export async function steamRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Also remove from CompatToolMapping in config.vdf and localconfig.vdf
+    removeCompatToolMapping(targetId);
+
     if (!deletedAny) {
       return reply.status(404).send({ error: 'Ярлык не найден в shortcuts.vdf' });
     }
@@ -1513,25 +1625,46 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      if (fs.existsSync('/host_root/usr/bin/pkill') || fs.existsSync('/host_root/bin/pkill')) {
-        try {
-          execSync('chroot /host_root pkill -HUP steam || chroot /host_root pkill -15 steam || true', {
-            timeout: 4000,
-            stdio: 'ignore',
-          });
-        } catch {}
-      }
+      console.log('[Steam] Triggering host Steam client reload...');
 
+      // 1. Try graceful steam -shutdown
       try {
-        execSync('pkill -HUP steam || pkill -15 steam || true', {
+        execSync('chroot /host_root steam -shutdown 2>/dev/null || true', { timeout: 3000, stdio: 'ignore' });
+      } catch {}
+
+      // 2. Terminate steam processes via SIGTERM so gamescope-session immediately revives Steam
+      try {
+        execSync(
+          'chroot /host_root pkill -15 -f "/steam" 2>/dev/null || ' +
+          'chroot /host_root pkill -15 -x steam 2>/dev/null || ' +
+          'pkill -15 -f "/steam" 2>/dev/null || ' +
+          'pkill -15 -x steam 2>/dev/null || true',
+          { timeout: 3000, stdio: 'ignore' }
+        );
+      } catch {}
+
+      // 3. Fallback: if SteamOS user session systemd unit is available
+      try {
+        execSync('chroot /host_root systemctl --user restart gamescope-session-steam 2>/dev/null || true', {
           timeout: 2000,
           stdio: 'ignore',
         });
       } catch {}
 
+      // 4. Force kill fallback after 1.5s if process is still hung
+      setTimeout(() => {
+        try {
+          execSync(
+            'chroot /host_root pkill -9 -x steam 2>/dev/null || ' +
+            'pkill -9 -x steam 2>/dev/null || true',
+            { timeout: 2000, stdio: 'ignore' }
+          );
+        } catch {}
+      }, 1500);
+
       return {
         success: true,
-        message: 'Команда перезапуска Steam отправлена. Если запущен Game Mode, интерфейс обновится автоматически.',
+        message: 'Команда перезапуска Steam отправлена. SteamOS обновит библиотеку на лету за пару секунд.',
       };
     } catch (err: any) {
       return reply.status(500).send({

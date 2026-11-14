@@ -7,6 +7,7 @@ Requires=gamecube-pod.service
 ContainerName=gamecube-web
 Pod=gamecube.pod
 Image=localhost/gamecube-manager:1.0.1
+PodmanArgs=--pid=host
 Volume=/:/host_root:rslave
 Volume=/mnt/game_data:/mnt/game_data:rw
 Volume=gamecube-data:/app/backend/data:rw
