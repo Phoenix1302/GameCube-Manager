@@ -222,8 +222,8 @@ echo -e "    ${GREEN}✔${NC} Quadlets installed to: ${CYAN}${QUADLET_DIR}${NC}"
 # 7. Reload and Start Service
 echo -e "\n${BLUE}==>${NC} ${BOLD}7. Starting GameCube-Manager service...${NC}"
 systemctl --user daemon-reload
-systemctl --user enable --now gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
-systemctl --user restart gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
+systemctl --user restart gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service || \
+systemctl --user start gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
 
 # 8. Health Verification
 echo -e "    Waiting for services to initialize..."

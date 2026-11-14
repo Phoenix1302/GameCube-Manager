@@ -14,7 +14,6 @@ QUADLET_DIR="${USER_HOME}/.config/containers/systemd"
 
 echo "==> Stopping GameCube-Manager systemd service..."
 systemctl --user stop gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service || true
-systemctl --user disable gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service || true
 
 echo "==> Removing Quadlets..."
 rm -f "${QUADLET_DIR}/gamecube.pod" \
