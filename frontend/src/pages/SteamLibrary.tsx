@@ -395,9 +395,9 @@ export const SteamLibrary: React.FC = () => {
                           }}
                         />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 text-slate-500 p-4 text-center">
-                          <Folder className="w-10 h-10 mb-1 text-slate-600" />
-                          <span className="text-xs font-bold text-slate-400 truncate max-w-full">
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-800 text-slate-400 p-4 text-center">
+                          <Gamepad2 className="w-10 h-10 mb-2 text-steam-accent" />
+                          <span className="text-xs font-bold text-white line-clamp-2 px-2">
                             {game.name}
                           </span>
                         </div>
@@ -424,10 +424,14 @@ export const SteamLibrary: React.FC = () => {
                         📁 {game.displayPath}
                       </div>
 
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
                         {game.isOfficialSteam ? (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-steam-blue/20 text-steam-blue border border-steam-blue/30">
                             Steam AppID: {game.appId}
+                          </span>
+                        ) : game.appId ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Локальная игра (Steam ID: {game.appId})
                           </span>
                         ) : (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">

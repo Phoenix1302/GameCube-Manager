@@ -37,14 +37,123 @@ export function toInternalPath(p: string): string {
   return p;
 }
 
+function isJunkDirectory(name: string): boolean {
+  if (!name) return true;
+  const lower = name.toLowerCase().trim();
+  const junkPatterns = [
+    'steam controller configs',
+    'steamworks shared',
+    'steam linux runtime',
+    'common redistributables',
+    'proton',
+    'shadercache',
+    'directx',
+    'vcredist',
+    '.tools',
+    'depotcache',
+  ];
+  return junkPatterns.some((pattern) => lower.includes(pattern));
+}
+
+// Well-known popular game titles mapped to official Steam AppIDs for instant cover art
+const KNOWN_GAME_APPIDS: Record<string, number> = {
+  'dead space (2023)': 1693980,
+  'dead space': 1693980,
+  'helldivers 2': 553850,
+  'helldivers™ 2': 553850,
+  'space marine 2': 1943950,
+  'warhammer 40,000: space marine 2': 1943950,
+  'warhammer 40000 space marine 2': 1943950,
+  'metro 2033 redux': 286690,
+  'metro last light redux': 287390,
+  'metro exodus': 412020,
+  'escape the backrooms': 2180100,
+  'escapethebackrooms': 2180100,
+  'the witcher 3': 292030,
+  'the witcher 3: wild hunt': 292030,
+  'the witcher 3 wild hunt': 292030,
+  'monster hunter: world': 582010,
+  'monster hunter world': 582010,
+  'warframe': 230410,
+  'cyberpunk 2077': 1091500,
+  'baldurs gate 3': 1086940,
+  "baldur's gate 3": 1086940,
+  'elden ring': 1245620,
+  'hogwarts legacy': 990080,
+  'starfield': 1716740,
+  'black myth: wukong': 2358720,
+  'black myth wukong': 2358720,
+  'forza horizon 5': 1551360,
+  'red dead redemption 2': 1174180,
+  'grand theft auto v': 271590,
+  'gta v': 271590,
+  'god of war': 1593500,
+  'god of war ragnarok': 2322010,
+  'ghost of tsushima': 2215430,
+  'spider-man remastered': 1817070,
+  'marvel’s spider-man remastered': 1817070,
+  'horizon zero dawn': 1151640,
+  'horizon forbidden west': 2420110,
+  'the last of us part i': 1888930,
+  'palworld': 1623730,
+  'dota 2': 570,
+  'counter-strike 2': 730,
+  'team fortress 2': 440,
+  'apex legends': 1172470,
+  'sifu': 2138710,
+  'stardew valley': 413150,
+  'hades': 1145360,
+  'hades ii': 1145350,
+  'lies of p': 1627720,
+  'armored core vi': 1888160,
+  'resident evil 4': 2050650,
+  'resident evil village': 1196590,
+  'fallout 4': 377160,
+  'skyrim special edition': 489830,
+  'the elder scrolls v: skyrim': 72850,
+};
+
+function resolveAppIdByName(name: string): number | null {
+  if (!name) return null;
+  const clean = name.toLowerCase().trim().replace(/[®™]/g, '');
+  if (KNOWN_GAME_APPIDS[clean]) return KNOWN_GAME_APPIDS[clean];
+
+  const withoutParens = clean.replace(/\s*\([^)]*\)/g, '').trim();
+  if (KNOWN_GAME_APPIDS[withoutParens]) return KNOWN_GAME_APPIDS[withoutParens];
+
+  const noPunct = clean.replace(/[:\-_\.]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (KNOWN_GAME_APPIDS[noPunct]) return KNOWN_GAME_APPIDS[noPunct];
+
+  return null;
+}
+
 function parseAcfFile(filePath: string): Record<string, string> {
   try {
     const text = fs.readFileSync(filePath, 'utf-8');
     const result: Record<string, string> = {};
-    const regex = /"([^"]+)"\s+"([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      result[match[1]] = match[2];
+    const lines = text.split(/\r?\n/);
+    let depth = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (trimmed === '{') {
+        depth++;
+        continue;
+      }
+      if (trimmed === '}') {
+        depth--;
+        continue;
+      }
+
+      // Root AppState properties are strictly at depth 1
+      if (depth === 1) {
+        const match = trimmed.match(/^"([^"]+)"\s+"([^"]*)"/);
+        if (match) {
+          result[match[1]] = match[2];
+        }
+      }
     }
     return result;
   } catch {
@@ -60,34 +169,42 @@ function formatBytes(bytes: number): string {
 }
 
 export function findSteamLibraryFolders(): string[] {
-  const libraries = new Set<string>();
+  const seenClean = new Set<string>();
+  const libraries: string[] = [];
 
-  // 1. Explicitly check user's main game drive: /mnt/game_data/SteamLibrary
-  const primaryCandidates = [
-    '/mnt/game_data/SteamLibrary',
-    '/host_root/mnt/game_data/SteamLibrary',
-  ];
-  for (const cand of primaryCandidates) {
-    if (fs.existsSync(cand)) {
-      libraries.add(cand);
+  const addLib = (rawPath: string) => {
+    if (!rawPath) return;
+    let target = '';
+    if (fs.existsSync(rawPath)) {
+      target = rawPath;
+    } else if (fs.existsSync('/host_root' + rawPath)) {
+      target = '/host_root' + rawPath;
+    } else if (rawPath.startsWith('/host_root') && fs.existsSync(rawPath.replace(/^\/host_root/, ''))) {
+      target = rawPath.replace(/^\/host_root/, '');
     }
-  }
 
-  // 2. Check settings / config if configured
+    if (!target) return;
+    const clean = toCleanPath(target).toLowerCase();
+    if (!seenClean.has(clean)) {
+      seenClean.add(clean);
+      libraries.push(target);
+    }
+  };
+
+  // Primary direct mount
+  addLib('/mnt/game_data/SteamLibrary');
+
+  // Configured path
   const configured = settingsQueries.get('steam_library_path', '');
-  if (configured) {
-    const internal = toInternalPath(configured);
-    if (fs.existsSync(internal)) {
-      libraries.add(internal);
-    }
-  }
+  if (configured) addLib(configured);
 
-  // 3. Scan libraryfolders.vdf
+  // Scan libraryfolders.vdf
   const vdfCandidates = [
     '/host_root/home/gamecube/.local/share/Steam/steamapps/libraryfolders.vdf',
     '/host_root/home/gamecube/.steam/steam/steamapps/libraryfolders.vdf',
-    '/host_root/home/deck/.local/share/Steam/steamapps/libraryfolders.vdf',
     '/home/gamecube/.local/share/Steam/steamapps/libraryfolders.vdf',
+    '/host_root/mnt/game_data/SteamLibrary/libraryfolder.vdf',
+    '/mnt/game_data/SteamLibrary/libraryfolder.vdf',
   ];
 
   const userdata = getSteamUserdataDir();
@@ -102,11 +219,7 @@ export function findSteamLibraryFolders(): string[] {
         const content = fs.readFileSync(vdfPath, 'utf-8');
         const pathMatches = content.matchAll(/"path"\s+"([^"]+)"/g);
         for (const m of pathMatches) {
-          const rawPath = m[1];
-          const resolved = toInternalPath(rawPath);
-          if (fs.existsSync(resolved)) {
-            libraries.add(resolved);
-          }
+          addLib(m[1]);
         }
       } catch (err) {
         console.warn(`[Steam] Failed to parse libraryfolders at ${vdfPath}:`, err);
@@ -114,7 +227,7 @@ export function findSteamLibraryFolders(): string[] {
     }
   }
 
-  return Array.from(libraries);
+  return libraries;
 }
 
 export interface InstalledGameInfo {
@@ -136,6 +249,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
   const libraryDirs = findSteamLibraryFolders();
   const allGames: InstalledGameInfo[] = [];
   const librariesSummary: Array<{ path: string; displayPath: string; gamesCount: number }> = [];
+  const seenGameKeys = new Set<string>();
 
   for (const libDir of libraryDirs) {
     const steamappsDir = path.join(libDir, 'steamapps');
@@ -158,28 +272,33 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
             const sizeBytes = data['SizeOnDisk'] ? parseInt(data['SizeOnDisk'], 10) : 0;
             const lastUpdated = data['LastUpdated'];
 
-            if (installDir) {
+            if (installDir && !isJunkDirectory(name || installDir)) {
               matchedCommonDirs.add(installDir.toLowerCase());
+              matchedCommonDirs.add(installDir.toLowerCase().replace(/[\s\-_]/g, ''));
+
               const gameFullPath = path.join(commonDir, installDir);
               const exists = fs.existsSync(gameFullPath);
 
-              const isRuntime = /steam linux runtime|proton/i.test(name || installDir);
-              if (!isRuntime && (exists || sizeBytes > 0)) {
-                libGameCount++;
-                allGames.push({
-                  appId,
-                  name: name || installDir,
-                  installDir,
-                  fullPath: gameFullPath,
-                  displayPath: toCleanPath(gameFullPath),
-                  sizeBytes,
-                  sizeFormatted: formatBytes(sizeBytes),
-                  headerImage: appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '',
-                  isOfficialSteam: true,
-                  libraryPath: libDir,
-                  libraryDisplayPath: toCleanPath(libDir),
-                  lastUpdated,
-                });
+              if (exists || sizeBytes > 0) {
+                const uniqueKey = appId ? `steam_${appId}` : `dir_${installDir.toLowerCase()}`;
+                if (!seenGameKeys.has(uniqueKey)) {
+                  seenGameKeys.add(uniqueKey);
+                  libGameCount++;
+                  allGames.push({
+                    appId,
+                    name: name || installDir,
+                    installDir,
+                    fullPath: gameFullPath,
+                    displayPath: toCleanPath(gameFullPath),
+                    sizeBytes,
+                    sizeFormatted: formatBytes(sizeBytes),
+                    headerImage: appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '',
+                    isOfficialSteam: true,
+                    libraryPath: libDir,
+                    libraryDisplayPath: toCleanPath(libDir),
+                    lastUpdated,
+                  });
+                }
               }
             }
           }
@@ -196,24 +315,34 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
         for (const entry of entries) {
           if (entry.isDirectory()) {
             const folderName = entry.name;
-            if (/steam linux runtime|proton/i.test(folderName)) continue;
+            if (isJunkDirectory(folderName)) continue;
 
-            if (!matchedCommonDirs.has(folderName.toLowerCase())) {
-              const gameFullPath = path.join(commonDir, folderName);
-              libGameCount++;
-              allGames.push({
-                appId: null,
-                name: folderName,
-                installDir: folderName,
-                fullPath: gameFullPath,
-                displayPath: toCleanPath(gameFullPath),
-                sizeBytes: 0,
-                sizeFormatted: 'Локальная папка',
-                headerImage: '',
-                isOfficialSteam: false,
-                libraryPath: libDir,
-                libraryDisplayPath: toCleanPath(libDir),
-              });
+            const normalizedFolder = folderName.toLowerCase();
+            const squashedFolder = normalizedFolder.replace(/[\s\-_]/g, '');
+
+            if (!matchedCommonDirs.has(normalizedFolder) && !matchedCommonDirs.has(squashedFolder)) {
+              const resolvedAppId = resolveAppIdByName(folderName);
+              const uniqueKey = resolvedAppId ? `steam_${resolvedAppId}` : `dir_${normalizedFolder}`;
+
+              if (!seenGameKeys.has(uniqueKey)) {
+                seenGameKeys.add(uniqueKey);
+                const gameFullPath = path.join(commonDir, folderName);
+                libGameCount++;
+
+                allGames.push({
+                  appId: resolvedAppId,
+                  name: folderName,
+                  installDir: folderName,
+                  fullPath: gameFullPath,
+                  displayPath: toCleanPath(gameFullPath),
+                  sizeBytes: 0,
+                  sizeFormatted: 'Локальная папка',
+                  headerImage: resolvedAppId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${resolvedAppId}/header.jpg` : '',
+                  isOfficialSteam: false,
+                  libraryPath: libDir,
+                  libraryDisplayPath: toCleanPath(libDir),
+                });
+              }
             }
           }
         }
