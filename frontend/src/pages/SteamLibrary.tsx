@@ -62,6 +62,28 @@ export const SteamLibrary: React.FC = () => {
   const [submittingSmartAdd, setSubmittingSmartAdd] = useState(false);
   const [showManualExeInput, setShowManualExeInput] = useState(false);
 
+  // Smart Add Modal: Artwork candidates state
+  const [modalArtworks, setModalArtworks] = useState<{
+    resolvedSteamAppId: number | null;
+    posters: Array<{ id: string; url: string; thumb: string; source: 'steam' | 'steamgriddb'; author?: string }>;
+    banners: Array<{ id: string; url: string; thumb: string; source: 'steam' | 'steamgriddb'; author?: string }>;
+    heroes: Array<{ id: string; url: string; thumb: string; source: 'steam' | 'steamgriddb'; author?: string }>;
+    logos: Array<{ id: string; url: string; thumb: string; source: 'steam' | 'steamgriddb'; author?: string }>;
+  }>({
+    resolvedSteamAppId: null,
+    posters: [],
+    banners: [],
+    heroes: [],
+    logos: [],
+  });
+  const [loadingModalArtworks, setLoadingModalArtworks] = useState(false);
+  const [artworkSearchQuery, setArtworkSearchQuery] = useState('');
+  const [modalArtworkTab, setModalArtworkTab] = useState<'poster' | 'banner' | 'hero' | 'logo'>('poster');
+  const [selectedModalPoster, setSelectedModalPoster] = useState<string | null>(null);
+  const [selectedModalBanner, setSelectedModalBanner] = useState<string | null>(null);
+  const [selectedModalHero, setSelectedModalHero] = useState<string | null>(null);
+  const [selectedModalLogo, setSelectedModalLogo] = useState<string | null>(null);
+
   // New shortcut wizard form
   const [appName, setAppName] = useState('');
   const [exePath, setExePath] = useState('');
@@ -269,24 +291,80 @@ export const SteamLibrary: React.FC = () => {
     });
   };
 
+  const loadArtworkCandidates = async (query: string, appId?: number | null) => {
+    if (!query && !appId) return;
+    try {
+      setLoadingModalArtworks(true);
+      const res = await api.get('/steam/artwork-candidates', {
+        params: {
+          name: query.trim() || undefined,
+          appId: appId || undefined,
+        },
+      });
+      const data = res.data;
+      setModalArtworks({
+        resolvedSteamAppId: data.resolvedSteamAppId || null,
+        posters: data.posters || [],
+        banners: data.banners || [],
+        heroes: data.heroes || [],
+        logos: data.logos || [],
+      });
+
+      // Auto-select first option if none is currently selected
+      if (data.posters?.length > 0 && !selectedModalPoster) {
+        setSelectedModalPoster(data.posters[0].url);
+      }
+      if (data.banners?.length > 0 && !selectedModalBanner) {
+        setSelectedModalBanner(data.banners[0].url);
+      }
+      if (data.heroes?.length > 0 && !selectedModalHero) {
+        setSelectedModalHero(data.heroes[0].url);
+      }
+      if (data.logos?.length > 0 && !selectedModalLogo) {
+        setSelectedModalLogo(data.logos[0].url);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load artwork candidates', err);
+    } finally {
+      setLoadingModalArtworks(false);
+    }
+  };
+
   const openSmartModal = async (game?: any) => {
     setModalGame(game || null);
     setShowManualExeInput(false);
     const initialName = game ? game.name : '';
     const initialPath = game ? game.fullPath || game.displayPath : '/mnt/game_data';
     setModalAppName(initialName);
+    setArtworkSearchQuery(initialName);
     setModalGamePath(initialPath);
     setModalCompatTool('GE-Proton9-20');
     setModalLaunchOptions('gamemoderun %command%');
     setModalInstallArtwork(true);
+    setModalArtworkTab('poster');
+    setSelectedModalPoster(null);
+    setSelectedModalBanner(null);
+    setSelectedModalHero(null);
+    setSelectedModalLogo(null);
+    setModalArtworks({
+      resolvedSteamAppId: null,
+      posters: [],
+      banners: [],
+      heroes: [],
+      logos: [],
+    });
     setSmartModalOpen(true);
 
     if (game) {
-      await scanExecutablesForPath(initialPath);
+      scanExecutablesForPath(initialPath);
     } else {
       setDetectedExes([]);
       setModalSelectedExe('');
       setModalStartDir('');
+    }
+
+    if (initialName || game?.appId) {
+      loadArtworkCandidates(initialName, game?.appId);
     }
   };
 
@@ -331,6 +409,15 @@ export const SteamLibrary: React.FC = () => {
         compatTool: modalCompatTool,
         launchOptions: modalLaunchOptions,
         installArtwork: modalInstallArtwork,
+        resolvedSteamAppId: modalArtworks.resolvedSteamAppId || undefined,
+        customArtwork: modalInstallArtwork
+          ? {
+              poster: selectedModalPoster || undefined,
+              banner: selectedModalBanner || undefined,
+              hero: selectedModalHero || undefined,
+              logo: selectedModalLogo || undefined,
+            }
+          : undefined,
       });
 
       setSuccessMsg(`Ярлык «${modalAppName}» и все обложки успешно добавлены в Steam!`);
@@ -878,48 +965,69 @@ export const SteamLibrary: React.FC = () => {
       {smartModalOpen && typeof document !== 'undefined' && createPortal(
         <div
           onClick={() => setSmartModalOpen(false)}
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xl my-auto bg-steam-card border border-steam-border/90 rounded-2xl shadow-2xl p-5 sm:p-6 relative text-left"
+            className="w-full max-w-2xl max-h-[92vh] flex flex-col my-auto bg-steam-card border border-steam-border/90 rounded-2xl shadow-2xl relative text-left overflow-hidden"
           >
-            <button
-              onClick={() => setSmartModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
             {/* Header */}
-            <div className="flex items-center gap-3 mb-5 pr-8">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-steam-blue to-steam-cyan flex items-center justify-center text-white shadow-md shadow-blue-500/25 flex-shrink-0">
-                <Gamepad2 className="w-6 h-6" />
+            <div className="p-5 sm:p-6 pb-3 border-b border-steam-border/60 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3 pr-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-steam-blue to-steam-cyan flex items-center justify-center text-white shadow-md shadow-blue-500/25 flex-shrink-0">
+                  <Gamepad2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    Добавление игры в Steam (Game Mode)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Создание ярлыка в shortcuts.vdf, автопоиск .exe, настройка Proton и выбор обложек.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                  Добавление игры в Steam (Game Mode)
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Создание ярлыка в shortcuts.vdf, автопоиск .exe, настройка Proton и скачивание обложек.
-                </p>
-              </div>
+              <button
+                onClick={() => setSmartModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleSmartAddSubmit} className="space-y-4">
+            <form onSubmit={handleSmartAddSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
               {/* Game Name */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Название игры (в интерфейсе Steam) *
                 </label>
-                <input
-                  type="text"
-                  value={modalAppName}
-                  onChange={(e) => setModalAppName(e.target.value)}
-                  placeholder="Например: Dead Space (2023)"
-                  required
-                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={modalAppName}
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      if (!artworkSearchQuery || artworkSearchQuery === modalAppName) {
+                        setArtworkSearchQuery(newName);
+                      }
+                      setModalAppName(newName);
+                    }}
+                    placeholder="Например: Dead Space (2023)"
+                    required
+                    className="flex-1 bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                  />
+                  {modalAppName.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => loadArtworkCandidates(artworkSearchQuery || modalAppName, modalGame?.appId)}
+                      disabled={loadingModalArtworks}
+                      className="px-3 py-2.5 rounded-xl bg-steam-nav hover:bg-slate-700 text-xs font-medium text-steam-cyan border border-steam-border flex items-center gap-1.5 cursor-pointer disabled:opacity-50 flex-shrink-0"
+                      title="Найти обложки для этого названия"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loadingModalArtworks ? 'animate-spin' : ''}`} />
+                      <span>Обложки</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Game Directory & Scanner */}
@@ -1060,24 +1168,384 @@ export const SteamLibrary: React.FC = () => {
                 </div>
               </div>
 
-              {/* Artwork auto-download toggle */}
-              <div className="p-3 rounded-xl bg-steam-nav border border-steam-border/80">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={modalInstallArtwork}
-                    onChange={(e) => setModalInstallArtwork(e.target.checked)}
-                    className="mt-0.5 rounded border-steam-border text-steam-blue focus:ring-0"
-                  />
-                  <div>
-                    <span className="text-xs font-bold text-slate-200">
-                      Автоматически установить полный набор обложек
-                    </span>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Скачает вертикальный постер (600x900), баннер (460x215), фоновый арт Hero (1920x620) и логотип в папку grid Steam.
-                    </p>
+              {/* Artwork auto-download toggle & Interactive Visual Selector */}
+              <div className="p-3.5 rounded-xl bg-steam-nav border border-steam-border space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={modalInstallArtwork}
+                      onChange={(e) => setModalInstallArtwork(e.target.checked)}
+                      className="mt-0.5 rounded border-steam-border text-steam-blue focus:ring-0 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-steam-cyan" />
+                        Установить и настроить обложки для Steam
+                      </span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Постер (600×900), баннер (460×215), фоновый арт Hero (1920×620) и логотип в папку grid Steam.
+                      </p>
+                    </div>
+                  </label>
+
+                  {modalInstallArtwork && (
+                    <button
+                      type="button"
+                      onClick={() => loadArtworkCandidates(artworkSearchQuery || modalAppName, modalGame?.appId)}
+                      disabled={loadingModalArtworks || (!artworkSearchQuery.trim() && !modalAppName.trim())}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-steam-blue/20 text-steam-cyan border border-steam-blue/30 hover:bg-steam-blue/30 flex items-center gap-1.5 flex-shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingModalArtworks ? 'animate-spin' : ''}`} />
+                      <span>{loadingModalArtworks ? 'Поиск...' : 'Обновить'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {modalInstallArtwork && (
+                  <div className="pt-2 border-t border-slate-700/50 space-y-3">
+                    {/* Search query override */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={artworkSearchQuery}
+                          onChange={(e) => setArtworkSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              loadArtworkCandidates(artworkSearchQuery, modalGame?.appId);
+                            }
+                          }}
+                          placeholder="Поисковый запрос для обложек (например: LEGO Batman)..."
+                          className="w-full bg-slate-900/80 text-slate-200 placeholder-slate-500 text-xs rounded-lg pl-8 pr-3 py-1.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadArtworkCandidates(artworkSearchQuery, modalGame?.appId)}
+                        disabled={loadingModalArtworks || !artworkSearchQuery.trim()}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg bg-steam-blue hover:bg-blue-600 text-white flex items-center gap-1 cursor-pointer disabled:opacity-50 flex-shrink-0"
+                      >
+                        {loadingModalArtworks ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        <span>Найти</span>
+                      </button>
+                    </div>
+
+                    {/* Category tabs */}
+                    <div className="flex items-center gap-1 p-1 bg-slate-900/80 rounded-xl border border-steam-border text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setModalArtworkTab('poster')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                          modalArtworkTab === 'poster'
+                            ? 'bg-steam-blue text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>Постер</span>
+                        {modalArtworks.posters.length > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${modalArtworkTab === 'poster' ? 'bg-white/20' : 'bg-slate-800 text-slate-300'}`}>
+                            {modalArtworks.posters.length}
+                          </span>
+                        )}
+                        {selectedModalPoster && <Check className="w-3 h-3 text-emerald-400" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModalArtworkTab('banner')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                          modalArtworkTab === 'banner'
+                            ? 'bg-steam-blue text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>Баннер</span>
+                        {modalArtworks.banners.length > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${modalArtworkTab === 'banner' ? 'bg-white/20' : 'bg-slate-800 text-slate-300'}`}>
+                            {modalArtworks.banners.length}
+                          </span>
+                        )}
+                        {selectedModalBanner && <Check className="w-3 h-3 text-emerald-400" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModalArtworkTab('hero')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                          modalArtworkTab === 'hero'
+                            ? 'bg-steam-blue text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>Hero</span>
+                        {modalArtworks.heroes.length > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${modalArtworkTab === 'hero' ? 'bg-white/20' : 'bg-slate-800 text-slate-300'}`}>
+                            {modalArtworks.heroes.length}
+                          </span>
+                        )}
+                        {selectedModalHero && <Check className="w-3 h-3 text-emerald-400" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setModalArtworkTab('logo')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg font-medium transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                          modalArtworkTab === 'logo'
+                            ? 'bg-steam-blue text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>Лого</span>
+                        {modalArtworks.logos.length > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${modalArtworkTab === 'logo' ? 'bg-white/20' : 'bg-slate-800 text-slate-300'}`}>
+                            {modalArtworks.logos.length}
+                          </span>
+                        )}
+                        {selectedModalLogo && <Check className="w-3 h-3 text-emerald-400" />}
+                      </button>
+                    </div>
+
+                    {/* Gallery View */}
+                    <div className="min-h-[140px] max-h-56 overflow-y-auto p-1.5 rounded-xl bg-slate-900/60 border border-steam-border/60">
+                      {loadingModalArtworks ? (
+                        <div className="h-32 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+                          <Loader2 className="w-5 h-5 text-steam-cyan animate-spin" />
+                          <span>Поиск и загрузка обложек из Steam CDN / SteamGridDB...</span>
+                        </div>
+                      ) : (
+                        <>
+                          {modalArtworkTab === 'poster' && (
+                            modalArtworks.posters.length === 0 ? (
+                              <div className="h-28 flex flex-col items-center justify-center text-slate-500 text-xs text-center p-3">
+                                <span>Постеры не найдены. Попробуйте изменить поисковый запрос выше.</span>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 p-1">
+                                {modalArtworks.posters.map((item) => {
+                                  const isSelected = selectedModalPoster === item.url;
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => setSelectedModalPoster(isSelected ? null : item.url)}
+                                      className={`group relative rounded-lg overflow-hidden border-2 transition-all cursor-pointer aspect-[2/3] bg-slate-950 ${
+                                        isSelected
+                                          ? 'border-steam-cyan ring-2 ring-steam-cyan/50 shadow-md shadow-cyan-500/30'
+                                          : 'border-transparent hover:border-slate-500 opacity-80 hover:opacity-100'
+                                      }`}
+                                    >
+                                      <img
+                                        src={item.thumb}
+                                        alt="Poster"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <span
+                                        className={`absolute top-1 left-1 text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                                          item.source === 'steam'
+                                            ? 'bg-steam-blue text-white'
+                                            : 'bg-amber-600/90 text-white'
+                                        }`}
+                                      >
+                                        {item.source === 'steam' ? 'Steam' : 'SGDB'}
+                                      </span>
+                                      {isSelected && (
+                                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-steam-cyan text-slate-950 flex items-center justify-center shadow">
+                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+
+                          {modalArtworkTab === 'banner' && (
+                            modalArtworks.banners.length === 0 ? (
+                              <div className="h-28 flex flex-col items-center justify-center text-slate-500 text-xs text-center p-3">
+                                <span>Баннеры не найдены. Попробуйте изменить поисковый запрос выше.</span>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-1">
+                                {modalArtworks.banners.map((item) => {
+                                  const isSelected = selectedModalBanner === item.url;
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => setSelectedModalBanner(isSelected ? null : item.url)}
+                                      className={`group relative rounded-lg overflow-hidden border-2 transition-all cursor-pointer aspect-[460/215] bg-slate-950 ${
+                                        isSelected
+                                          ? 'border-steam-cyan ring-2 ring-steam-cyan/50 shadow-md shadow-cyan-500/30'
+                                          : 'border-transparent hover:border-slate-500 opacity-80 hover:opacity-100'
+                                      }`}
+                                    >
+                                      <img
+                                        src={item.thumb}
+                                        alt="Banner"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <span
+                                        className={`absolute top-1 left-1 text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                                          item.source === 'steam'
+                                            ? 'bg-steam-blue text-white'
+                                            : 'bg-amber-600/90 text-white'
+                                        }`}
+                                      >
+                                        {item.source === 'steam' ? 'Steam' : 'SGDB'}
+                                      </span>
+                                      {isSelected && (
+                                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-steam-cyan text-slate-950 flex items-center justify-center shadow">
+                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+
+                          {modalArtworkTab === 'hero' && (
+                            modalArtworks.heroes.length === 0 ? (
+                              <div className="h-28 flex flex-col items-center justify-center text-slate-500 text-xs text-center p-3">
+                                <span>Фоны Hero не найдены. Попробуйте изменить поисковый запрос выше.</span>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2.5 p-1">
+                                {modalArtworks.heroes.map((item) => {
+                                  const isSelected = selectedModalHero === item.url;
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => setSelectedModalHero(isSelected ? null : item.url)}
+                                      className={`group relative rounded-lg overflow-hidden border-2 transition-all cursor-pointer aspect-[16/9] bg-slate-950 ${
+                                        isSelected
+                                          ? 'border-steam-cyan ring-2 ring-steam-cyan/50 shadow-md shadow-cyan-500/30'
+                                          : 'border-transparent hover:border-slate-500 opacity-80 hover:opacity-100'
+                                      }`}
+                                    >
+                                      <img
+                                        src={item.thumb}
+                                        alt="Hero"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <span
+                                        className={`absolute top-1 left-1 text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                                          item.source === 'steam'
+                                            ? 'bg-steam-blue text-white'
+                                            : 'bg-amber-600/90 text-white'
+                                        }`}
+                                      >
+                                        {item.source === 'steam' ? 'Steam' : 'SGDB'}
+                                      </span>
+                                      {isSelected && (
+                                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-steam-cyan text-slate-950 flex items-center justify-center shadow">
+                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+
+                          {modalArtworkTab === 'logo' && (
+                            modalArtworks.logos.length === 0 ? (
+                              <div className="h-28 flex flex-col items-center justify-center text-slate-500 text-xs text-center p-3">
+                                <span>Логотипы не найдены. Попробуйте изменить поисковый запрос выше.</span>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-1">
+                                {modalArtworks.logos.map((item) => {
+                                  const isSelected = selectedModalLogo === item.url;
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => setSelectedModalLogo(isSelected ? null : item.url)}
+                                      className={`group relative rounded-lg overflow-hidden border-2 transition-all cursor-pointer aspect-[16/9] bg-slate-950/80 p-2 flex items-center justify-center ${
+                                        isSelected
+                                          ? 'border-steam-cyan ring-2 ring-steam-cyan/50 shadow-md shadow-cyan-500/30'
+                                          : 'border-transparent hover:border-slate-500 opacity-80 hover:opacity-100'
+                                      }`}
+                                    >
+                                      <img
+                                        src={item.thumb}
+                                        alt="Logo"
+                                        className="max-w-full max-h-full object-contain"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <span
+                                        className={`absolute top-1 left-1 text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                                          item.source === 'steam'
+                                            ? 'bg-steam-blue text-white'
+                                            : 'bg-amber-600/90 text-white'
+                                        }`}
+                                      >
+                                        {item.source === 'steam' ? 'Steam' : 'SGDB'}
+                                      </span>
+                                      {isSelected && (
+                                        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-steam-cyan text-slate-950 flex items-center justify-center shadow">
+                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Active Selected Artworks Summary Strip */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/40 px-2.5 py-1.5 rounded-lg border border-steam-border/50">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <span className="font-semibold text-slate-300">Выбрано:</span>
+                        <span className={selectedModalPoster ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+                          Постер {selectedModalPoster ? '✓' : '—'}
+                        </span>
+                        <span className={selectedModalBanner ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+                          Баннер {selectedModalBanner ? '✓' : '—'}
+                        </span>
+                        <span className={selectedModalHero ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+                          Hero {selectedModalHero ? '✓' : '—'}
+                        </span>
+                        <span className={selectedModalLogo ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+                          Лого {selectedModalLogo ? '✓' : '—'}
+                        </span>
+                      </div>
+                      {(selectedModalPoster || selectedModalBanner || selectedModalHero || selectedModalLogo) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModalPoster(null);
+                            setSelectedModalBanner(null);
+                            setSelectedModalHero(null);
+                            setSelectedModalLogo(null);
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 cursor-pointer"
+                        >
+                          Сбросить все
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </label>
+                )}
               </div>
 
               {/* Hint */}

@@ -62,7 +62,7 @@ export function parseBinaryVdf(buffer: Buffer): Record<string, any> {
           break;
         case 0x02: // Int32
           if (offset + 4 <= buffer.length) {
-            map[key] = buffer.readInt32LE(offset);
+            map[key] = key.toLowerCase() === 'appid' ? buffer.readUInt32LE(offset) : buffer.readInt32LE(offset);
             offset += 4;
           }
           break;
@@ -98,7 +98,7 @@ export function serializeBinaryVdf(data: Record<string, any>): Buffer {
         buffers.push(Buffer.from([0x02]));
         writeString(subKey);
         const intBuf = Buffer.alloc(4);
-        intBuf.writeInt32LE(val, 0);
+        intBuf.writeInt32LE(val | 0, 0);
         buffers.push(intBuf);
       } else {
         buffers.push(Buffer.from([0x01]));

@@ -600,6 +600,196 @@ async function saveArtworkToSteamGrid(
   return false;
 }
 
+export interface ArtworkCandidate {
+  id: string;
+  url: string;
+  thumb: string;
+  source: 'steam' | 'steamgriddb';
+  author?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface ArtworkCandidatesResponse {
+  resolvedSteamAppId: number | null;
+  posters: ArtworkCandidate[];
+  banners: ArtworkCandidate[];
+  heroes: ArtworkCandidate[];
+  logos: ArtworkCandidate[];
+}
+
+export async function getArtworkCandidates(
+  name: string,
+  providedAppId?: number | null
+): Promise<ArtworkCandidatesResponse> {
+  const result: ArtworkCandidatesResponse = {
+    resolvedSteamAppId: null,
+    posters: [],
+    banners: [],
+    heroes: [],
+    logos: [],
+  };
+
+  const candidateSteamAppIds: number[] = [];
+  if (providedAppId) {
+    candidateSteamAppIds.push(providedAppId);
+    result.resolvedSteamAppId = providedAppId;
+  }
+
+  const directMapped = resolveAppIdByName(name);
+  if (directMapped && !candidateSteamAppIds.includes(directMapped)) {
+    candidateSteamAppIds.push(directMapped);
+    if (!result.resolvedSteamAppId) result.resolvedSteamAppId = directMapped;
+  }
+
+  // If no or few known Steam AppIDs, search Steam store by name
+  if (name && name.trim().length > 0) {
+    try {
+      const cleanTerm = name.replace(/\s*\([^)]*\)/g, '').replace(/[:\-_\.]/g, ' ').trim();
+      const searchRes = await axios.get(
+        `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(cleanTerm)}&l=russian&cc=KZ`,
+        { timeout: 5000 }
+      );
+      const items = searchRes.data?.items || [];
+      for (const item of items.slice(0, 3)) {
+        if (item.id && !candidateSteamAppIds.includes(item.id)) {
+          candidateSteamAppIds.push(item.id);
+          if (!result.resolvedSteamAppId) result.resolvedSteamAppId = item.id;
+        }
+      }
+    } catch {}
+  }
+
+  // 1. For each resolved Steam AppID, fetch official Steam Store artwork
+  for (const steamAppId of candidateSteamAppIds) {
+    result.posters.push({
+      id: `steam_poster_${steamAppId}`,
+      url: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+      thumb: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+      source: 'steam',
+      width: 600,
+      height: 900,
+    });
+
+    result.posters.push({
+      id: `steam_capsule_${steamAppId}`,
+      url: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
+      thumb: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
+      source: 'steam',
+      width: 616,
+      height: 353,
+    });
+
+    result.banners.push({
+      id: `steam_banner_${steamAppId}`,
+      url: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+      thumb: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+      source: 'steam',
+      width: 460,
+      height: 215,
+    });
+
+    result.heroes.push({
+      id: `steam_hero_${steamAppId}`,
+      url: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+      thumb: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+      source: 'steam',
+      width: 1920,
+      height: 620,
+    });
+
+    result.logos.push({
+      id: `steam_logo_${steamAppId}`,
+      url: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+      thumb: `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+      source: 'steam',
+    });
+  }
+
+  // 2. If SteamGridDB API key is configured, search and append community artworks
+  const sgdbKey = getSteamGridDbKey();
+  if (sgdbKey) {
+    try {
+      const cleanTerm = name.replace(/\s*\([^)]*\)/g, '').replace(/[:\-_\.]/g, ' ').trim();
+      const searchRes = await axios.get(
+        `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(cleanTerm)}`,
+        { headers: { Authorization: `Bearer ${sgdbKey}` }, timeout: 5000 }
+      );
+
+      const games = (searchRes.data?.data || []).slice(0, 2);
+      for (const game of games) {
+        const gameId = game.id;
+        const headers = { Authorization: `Bearer ${sgdbKey}` };
+
+        const [gridsRes, bannersRes, heroesRes, logosRes] = await Promise.allSettled([
+          axios.get(`https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=600x900`, { headers, timeout: 5000 }),
+          axios.get(`https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=460x215,920x430`, { headers, timeout: 5000 }),
+          axios.get(`https://www.steamgriddb.com/api/v2/heroes/game/${gameId}`, { headers, timeout: 5000 }),
+          axios.get(`https://www.steamgriddb.com/api/v2/logos/game/${gameId}`, { headers, timeout: 5000 }),
+        ]);
+
+        if (gridsRes.status === 'fulfilled') {
+          for (const g of (gridsRes.value.data?.data || []).slice(0, 8)) {
+            result.posters.push({
+              id: `sgdb_grid_${g.id}`,
+              url: g.url,
+              thumb: g.thumb || g.url,
+              source: 'steamgriddb',
+              author: g.author?.name,
+              width: g.width,
+              height: g.height,
+            });
+          }
+        }
+
+        if (bannersRes.status === 'fulfilled') {
+          for (const b of (bannersRes.value.data?.data || []).slice(0, 8)) {
+            result.banners.push({
+              id: `sgdb_banner_${b.id}`,
+              url: b.url,
+              thumb: b.thumb || b.url,
+              source: 'steamgriddb',
+              author: b.author?.name,
+              width: b.width,
+              height: b.height,
+            });
+          }
+        }
+
+        if (heroesRes.status === 'fulfilled') {
+          for (const h of (heroesRes.value.data?.data || []).slice(0, 6)) {
+            result.heroes.push({
+              id: `sgdb_hero_${h.id}`,
+              url: h.url,
+              thumb: h.thumb || h.url,
+              source: 'steamgriddb',
+              author: h.author?.name,
+              width: h.width,
+              height: h.height,
+            });
+          }
+        }
+
+        if (logosRes.status === 'fulfilled') {
+          for (const l of (logosRes.value.data?.data || []).slice(0, 6)) {
+            result.logos.push({
+              id: `sgdb_logo_${l.id}`,
+              url: l.url,
+              thumb: l.thumb || l.url,
+              source: 'steamgriddb',
+              author: l.author?.name,
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[SteamGridDB] Failed to fetch candidates:', err.message);
+    }
+  }
+
+  return result;
+}
+
 async function autoCreateShortcut(params: {
   appName: string;
   gamePath: string;
@@ -608,6 +798,13 @@ async function autoCreateShortcut(params: {
   compatTool?: string;
   launchOptions?: string;
   installArtwork?: boolean;
+  resolvedSteamAppId?: number;
+  customArtwork?: {
+    poster?: string;
+    banner?: string;
+    hero?: string;
+    logo?: string;
+  };
 }) {
   const steamPaths = findSteamUserConfigDir();
   if (!steamPaths) {
@@ -700,54 +897,98 @@ async function autoCreateShortcut(params: {
   };
 
   if (params.installArtwork !== false) {
-    const steamAppId = resolveAppIdByName(params.appName);
-    if (steamAppId) {
-      // Try official Steam Store CDN assets
-      const posterCandidates = [
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
-        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
-        `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/library_600x900.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
-      ];
-      for (const url of posterCandidates) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', url)) {
+    // 3.1 First priority: Apply user-selected custom artwork if provided
+    if (params.customArtwork) {
+      if (params.customArtwork.poster) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', params.customArtwork.poster)) {
           artworkStatus.poster = true;
-          break;
         }
       }
-
-      const bannerCandidates = [
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
-        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
-        `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/header.jpg`,
-      ];
-      for (const url of bannerCandidates) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', url)) {
+      if (params.customArtwork.banner) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', params.customArtwork.banner)) {
           artworkStatus.banner = true;
-          break;
         }
       }
-
-      const heroCandidates = [
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
-        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
-      ];
-      for (const url of heroCandidates) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', url)) {
+      if (params.customArtwork.hero) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', params.customArtwork.hero)) {
           artworkStatus.hero = true;
-          break;
+        }
+      }
+      if (params.customArtwork.logo) {
+        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', params.customArtwork.logo)) {
+          artworkStatus.logo = true;
+        }
+      }
+    }
+
+    // 3.2 For any artwork slot not chosen manually, try official Steam Store CDN assets
+    let steamAppId = params.resolvedSteamAppId || resolveAppIdByName(params.appName);
+    if (!steamAppId && params.appName && (!artworkStatus.poster || !artworkStatus.banner || !artworkStatus.hero || !artworkStatus.logo)) {
+      try {
+        const cleanTerm = params.appName.replace(/\s*\([^)]*\)/g, '').replace(/[:\-_\.]/g, ' ').trim();
+        const searchRes = await axios.get(
+          `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(cleanTerm)}&l=russian&cc=KZ`,
+          { timeout: 4000 }
+        );
+        const first = searchRes.data?.items?.[0];
+        if (first?.id) steamAppId = first.id;
+      } catch {}
+    }
+
+    if (steamAppId) {
+      if (!artworkStatus.poster) {
+        const posterCandidates = [
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+          `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_600x900.jpg`,
+          `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/library_600x900.jpg`,
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/capsule_616x353.jpg`,
+        ];
+        for (const url of posterCandidates) {
+          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'poster', url)) {
+            artworkStatus.poster = true;
+            break;
+          }
         }
       }
 
-      const logoCandidates = [
-        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
-        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
-      ];
-      for (const url of logoCandidates) {
-        if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', url)) {
-          artworkStatus.logo = true;
-          break;
+      if (!artworkStatus.banner) {
+        const bannerCandidates = [
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+          `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+          `https://cdn.cloudflare.steamstatic.com/steam/apps/${steamAppId}/header.jpg`,
+        ];
+        for (const url of bannerCandidates) {
+          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'banner', url)) {
+            artworkStatus.banner = true;
+            break;
+          }
+        }
+      }
+
+      if (!artworkStatus.hero) {
+        const heroCandidates = [
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+          `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/library_hero.jpg`,
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/header.jpg`,
+        ];
+        for (const url of heroCandidates) {
+          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'hero', url)) {
+            artworkStatus.hero = true;
+            break;
+          }
+        }
+      }
+
+      if (!artworkStatus.logo) {
+        const logoCandidates = [
+          `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+          `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${steamAppId}/logo.png`,
+        ];
+        for (const url of logoCandidates) {
+          if (await saveArtworkToSteamGrid(steamPaths.gridDir, appId, 'logo', url)) {
+            artworkStatus.logo = true;
+            break;
+          }
         }
       }
     }
@@ -1018,6 +1259,22 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Get artwork candidates (posters, banners, heroes, logos) from Steam CDN & SteamGridDB
+  fastify.get('/artwork-candidates', async (request, reply) => {
+    const { name, appId } = request.query as { name?: string; appId?: string };
+    if (!name && !appId) {
+      return reply.status(400).send({ error: 'name or appId parameter is required' });
+    }
+
+    const numAppId = appId ? parseInt(appId, 10) : null;
+    try {
+      const candidates = await getArtworkCandidates(name || '', numAppId);
+      return candidates;
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to fetch artwork candidates: ${err.message}` });
+    }
+  });
+
   // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos)
   fastify.post('/shortcuts/auto-create', async (request, reply) => {
     const {
@@ -1028,6 +1285,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
       compatTool,
       launchOptions,
       installArtwork = true,
+      resolvedSteamAppId,
+      customArtwork,
     } = request.body as {
       appName?: string;
       gamePath?: string;
@@ -1036,6 +1295,13 @@ export async function steamRoutes(fastify: FastifyInstance) {
       compatTool?: string;
       launchOptions?: string;
       installArtwork?: boolean;
+      resolvedSteamAppId?: number;
+      customArtwork?: {
+        poster?: string;
+        banner?: string;
+        hero?: string;
+        logo?: string;
+      };
     };
 
     if (!appName && !gamePath) {
@@ -1054,6 +1320,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
         compatTool,
         launchOptions,
         installArtwork,
+        resolvedSteamAppId,
+        customArtwork,
       });
 
       return result;
