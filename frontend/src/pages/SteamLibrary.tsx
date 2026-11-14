@@ -29,11 +29,13 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { SteamShortcut, SteamGridAsset } from '../types';
 
 export const SteamLibrary: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { confirm, alert } = useConfirm();
 
   // Active view tab: installed games vs non-steam shortcuts
   const [activeTab, setActiveTab] = useState<'installed' | 'shortcuts'>('installed');
@@ -155,7 +157,11 @@ export const SteamLibrary: React.FC = () => {
       setSuccessMsg(res.data.message || 'Команда отправлена. Steam перезапускается...');
       setTimeout(() => setSuccessMsg(null), 6000);
     } catch (err: any) {
-      alert(`Ошибка: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка перезапуска',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setRestartingSteam(false);
     }
@@ -181,7 +187,11 @@ export const SteamLibrary: React.FC = () => {
       const res = await api.get('/steam/grid/search', { params: { q: term } });
       setGridSearchResults(res.data.games || []);
     } catch (err: any) {
-      alert(`Ошибка поиска SteamGridDB: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка поиска SteamGridDB',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setSearchingGrid(false);
     }
@@ -227,7 +237,11 @@ export const SteamLibrary: React.FC = () => {
   const handleSaveToSteam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appName.trim() || !exePath.trim()) {
-      alert('Пожалуйста, укажите название игры и путь к исполняемому файлу');
+      await alert({
+        title: 'Внимание',
+        message: 'Пожалуйста, укажите название игры и путь к исполняемому файлу',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -293,7 +307,11 @@ export const SteamLibrary: React.FC = () => {
 
       loadShortcuts();
     } catch (err: any) {
-      alert(`Ошибка добавления в Steam: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка добавления в Steam',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setSaving(false);
     }
@@ -413,7 +431,11 @@ export const SteamLibrary: React.FC = () => {
   const handleSmartAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!modalAppName.trim() || !modalSelectedExe.trim()) {
-      alert('Укажите название игры и исполняемый файл');
+      await alert({
+        title: 'Внимание',
+        message: 'Укажите название игры и исполняемый файл',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -450,22 +472,75 @@ export const SteamLibrary: React.FC = () => {
       loadShortcuts();
       setTimeout(() => setSuccessMsg(null), 6000);
     } catch (err: any) {
-      alert(`Ошибка добавления в Steam: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка добавления в Steam',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setSubmittingSmartAdd(false);
     }
   };
 
-  const handleDeleteShortcut = async (appId?: number, name?: string) => {
-    if (!appId) return;
-    if (!window.confirm(`Удалить ярлык «${name || appId}» из Steam?`)) return;
+  const handleDeleteShortcut = async (s: SteamShortcut) => {
+    if (!s.appid) return;
+    const cleanPath = (s.StartDir || s.Exe || '').replace(/^["]+|["]+$/g, '');
+    const res = await confirm({
+      title: 'Удаление ярлыка Steam',
+      message: `Удалить ярлык «${s.AppName || s.appid}» из библиотеки Steam?`,
+      confirmText: 'Удалить ярлык',
+      cancelText: 'Отмена',
+      variant: 'danger',
+      showCheckbox: !!cleanPath,
+      checkboxLabel: `Также удалить папку игры с диска (${cleanPath})`,
+    });
+    if (!res.confirmed) return;
+
     try {
-      await api.delete(`/steam/shortcuts/${appId}`);
+      const resp = await api.delete(`/steam/shortcuts/${s.appid}`, {
+        params: {
+          deleteFiles: res.checked,
+          gamePath: cleanPath,
+        },
+      });
       loadShortcuts();
-      setSuccessMsg(`Ярлык «${name || appId}» удален из shortcuts.vdf`);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      loadInstalledGames();
+      setSuccessMsg(resp.data?.message || `Ярлык «${s.AppName || s.appid}» удален из shortcuts.vdf`);
+      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
-      alert(`Ошибка удаления ярлыка: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка удаления ярлыка',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
+    }
+  };
+
+  const handleDeleteLocalGame = async (game: any) => {
+    const res = await confirm({
+      title: 'Удаление сторонней игры',
+      message: `Вы действительно хотите полностью удалить стороннюю игру «${game.name}» с накопителя?\n\nКаталог: ${game.displayPath}\nВсе файлы игры будут удалены безвозвратно.`,
+      confirmText: 'Удалить игру с диска',
+      cancelText: 'Отмена',
+      variant: 'danger',
+    });
+    if (!res.confirmed) return;
+
+    try {
+      const resp = await api.post('/steam/delete-local-game', {
+        path: game.fullPath || game.displayPath,
+        removeShortcuts: true,
+      });
+      setSuccessMsg(resp.data?.message || `Игра «${game.name}» удалена с диска`);
+      loadInstalledGames();
+      loadShortcuts();
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err: any) {
+      await alert({
+        title: 'Ошибка удаления игры',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -743,7 +818,7 @@ export const SteamLibrary: React.FC = () => {
                     {/* Game Metadata Info */}
                     <div className="p-4 space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-bold text-sm text-white line-clamp-1 group-hover:text-steam-accent transition-colors">
+                        <h3 className="font-bold text-sm text-white line-clamp-2 break-words group-hover:text-steam-accent transition-colors" title={game.name}>
                           {game.name}
                         </h3>
                       </div>
@@ -815,6 +890,17 @@ export const SteamLibrary: React.FC = () => {
                         </button>
                       );
                     })()}
+
+                    {!game.isOfficialSteam && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLocalGame(game)}
+                        className="py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border hover:border-red-500/40 transition-colors cursor-pointer"
+                        title="Удалить стороннюю игру с накопителя"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1049,7 +1135,7 @@ export const SteamLibrary: React.FC = () => {
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <button
                         type="button"
-                        onClick={() => handleDeleteShortcut(s.appid, s.AppName)}
+                        onClick={() => handleDeleteShortcut(s)}
                         className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
                         title="Удалить ярлык из Steam"
                       >

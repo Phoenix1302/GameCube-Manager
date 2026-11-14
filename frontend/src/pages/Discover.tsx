@@ -40,35 +40,32 @@ const GameImage: React.FC<{ src: string; alt: string; appId: number }> = ({ src,
   }, [src]);
 
   const handleError = () => {
-    if (attempt === 0) {
-      setAttempt(1);
-      // If current URL was corrupted to a hashed header.jpg, restore it to capsule_231x87.jpg
-      if (currentSrc.includes('/header.jpg') && /[a-f0-9]{32,40}/.test(currentSrc)) {
-        setCurrentSrc(currentSrc.replace(/\/header\.jpg(\?.*)?$/, '/capsule_231x87.jpg$1'));
-        return;
-      }
-      // Fallback 1: Wide capsule 616x353
-      setCurrentSrc(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
-    } else if (attempt === 1) {
-      setAttempt(2);
-      // Fallback 2: Cloudflare CDN root header
-      setCurrentSrc(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`);
-    } else if (attempt === 2) {
-      setAttempt(3);
-      // Fallback 3: Akamai CDN root header
-      setCurrentSrc(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
-    } else if (attempt === 3) {
-      setAttempt(4);
-      // Fallback 4: Query backend details to fetch official exact hashed header from Steam API
-      api.get(`/games/details/${appId}`).then((res) => {
-        if (res.data?.headerImage && res.data.headerImage !== currentSrc) {
-          setCurrentSrc(res.data.headerImage);
-        } else {
-          setHasError(true);
-        }
-      }).catch(() => {
-        setHasError(true);
-      });
+    const nextAttempt = attempt + 1;
+    setAttempt(nextAttempt);
+
+    // 1. If current URL was corrupted to a hashed header.jpg, try the exact hashed capsule_231x87
+    if (nextAttempt === 1 && currentSrc.includes('/header.jpg') && /[a-f0-9]{32,40}/.test(currentSrc)) {
+      setCurrentSrc(currentSrc.replace(/\/header\.jpg(\?.*)?$/, '/capsule_231x87.jpg$1'));
+      return;
+    }
+    if (nextAttempt === 2 && currentSrc.includes('capsule_231x87.jpg') && /[a-f0-9]{32,40}/.test(currentSrc)) {
+      setCurrentSrc(currentSrc.replace(/\/capsule_231x87\.jpg(\?.*)?$/, '/capsule_231x87_alt_assets.jpg$1'));
+      return;
+    }
+
+    const fallbacks = [
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+      `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+      `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_sm_120.jpg`,
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    ];
+
+    const idx = (nextAttempt - 1) % fallbacks.length;
+    if (nextAttempt <= fallbacks.length + 1) {
+      setCurrentSrc(fallbacks[idx]);
     } else {
       setHasError(true);
     }

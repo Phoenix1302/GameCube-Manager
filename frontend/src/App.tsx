@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 
@@ -74,65 +75,67 @@ const HomeRoute: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/setup" element={<Setup />} />
+      <ConfirmProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/setup" element={<Setup />} />
 
-          {/* Protected Main Routes */}
-          <Route element={<ProtectedLayout />}>
-            <Route path="/" element={<HomeRoute />} />
+            {/* Protected Main Routes */}
+            <Route element={<ProtectedLayout />}>
+              <Route path="/" element={<HomeRoute />} />
 
-            {/* Gaming & Steam Routes (accessible by both regular users and admin) */}
-            <Route path="/discover" element={<Discover />} />
-            <Route path="/wishlist" element={<Wishlist />} />
-            <Route path="/steam" element={<SteamLibrary />} />
+              {/* Gaming & Steam Routes (accessible by both regular users and admin) */}
+              <Route path="/discover" element={<Discover />} />
+              <Route path="/wishlist" element={<Wishlist />} />
+              <Route path="/steam" element={<SteamLibrary />} />
 
-            {/* Shared Route: Torrents */}
-            <Route path="/torrents" element={<Torrents />} />
+              {/* Shared Route: Torrents */}
+              <Route path="/torrents" element={<Torrents />} />
 
-            {/* Settings Route */}
-            <Route path="/settings" element={<Settings />} />
+              {/* Settings Route */}
+              <Route path="/settings" element={<Settings />} />
 
-            {/* Admin-only Routes */}
-            <Route
-              path="/admin/monitoring"
-              element={
-                <AdminRoute>
-                  <AdminMonitoring />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="/admin/files"
-              element={
-                <AdminRoute>
-                  <AdminFiles />
-                </AdminRoute>
-              }
-            />
-            <Route path="/files" element={<Navigate to="/admin/files" replace />} />
-            <Route
-              path="/admin/terminal"
-              element={
-                <AdminRoute>
-                  <AdminTerminal />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="/admin/users"
-              element={
-                <AdminRoute>
-                  <AdminUsers />
-                </AdminRoute>
-              }
-            />
-          </Route>
+              {/* Admin-only Routes */}
+              <Route
+                path="/admin/monitoring"
+                element={
+                  <AdminRoute>
+                    <AdminMonitoring />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/admin/files"
+                element={
+                  <AdminRoute>
+                    <AdminFiles />
+                  </AdminRoute>
+                }
+              />
+              <Route path="/files" element={<Navigate to="/admin/files" replace />} />
+              <Route
+                path="/admin/terminal"
+                element={
+                  <AdminRoute>
+                    <AdminTerminal />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <AdminRoute>
+                    <AdminUsers />
+                  </AdminRoute>
+                }
+              />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ConfirmProvider>
     </AuthProvider>
   );
 };

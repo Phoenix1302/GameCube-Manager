@@ -58,7 +58,7 @@ export const Login: React.FC = () => {
           <div className="flex items-center justify-center gap-2 mb-1">
             <h2 className="text-2xl font-extrabold text-white tracking-tight">GAMECUBE MANAGER</h2>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30">
-              v1.0.1
+              v1.1.1
             </span>
           </div>
           <p className="text-xs text-slate-400">

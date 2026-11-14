@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   gamecube-web:
-    image: localhost/gamecube-manager:1.0.0
+    image: localhost/gamecube-manager:1.1.1
     container_name: gamecube-web
     restart: unless-stopped
     environment:
@@ -20,7 +20,7 @@ services:
       - "3000"
 
   gamecube-torrent:
-    image: localhost/gamecube-torrent:1.0.0
+    image: localhost/gamecube-torrent:1.1.1
     container_name: gamecube-torrent
     restart: unless-stopped
     volumes:
@@ -31,7 +31,7 @@ services:
       - "6882"
 
   gamecube-proxy:
-    image: localhost/gamecube-proxy:1.0.0
+    image: localhost/gamecube-proxy:1.1.1
     container_name: gamecube-proxy
     restart: unless-stopped
     ports:

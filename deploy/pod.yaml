@@ -9,7 +9,7 @@ spec:
   # 1. Web Application: Runs strictly on localhost inside the pod network
   # Port 3000 is NOT published to the host, preventing direct unencrypted access.
   - name: gamecube-web
-    image: localhost/gamecube-manager:1.0.0
+    image: localhost/gamecube-manager:1.1.1
     env:
     - name: PORT
       value: "3000"
@@ -31,7 +31,7 @@ spec:
 
   # 2. Headless qBittorrent: Runs strictly on internal localhost:8085 inside the pod network
   - name: gamecube-torrent
-    image: localhost/gamecube-torrent:1.0.0
+    image: localhost/gamecube-torrent:1.1.1
     volumeMounts:
     - name: gamecube-downloads
       mountPath: /downloads
@@ -40,7 +40,7 @@ spec:
 
   # 3. Nginx Reverse Proxy with SSL (Self-signed SAN certs, HTTP->HTTPS redirect & WebSocket)
   - name: gamecube-proxy
-    image: localhost/gamecube-proxy:1.0.0
+    image: localhost/gamecube-proxy:1.1.1
     ports:
     - containerPort: 80
       hostPort: 80

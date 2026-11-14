@@ -6,7 +6,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-proxy
 Pod=gamecube.pod
-Image=localhost/gamecube-proxy:1.0.1
+Image=localhost/gamecube-proxy:1.1.1
 Volume=gamecube-certs:/etc/nginx/certs:rw
 
 [Service]

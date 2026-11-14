@@ -175,11 +175,11 @@ export function initDb() {
     `);
   } catch {}
 
-  // Flush stale browse_cache rows and corrupted hashed header paths from earlier builds
+  // Flush stale browse_cache and game_cache from earlier builds to heal image URLs
   try {
     db.exec(`
       DELETE FROM browse_cache;
-      DELETE FROM game_cache WHERE header_image LIKE '%/header.jpg%' AND (header_image LIKE '%/store_item_assets/steam/apps/%/%/%');
+      DELETE FROM game_cache;
     `);
   } catch {}
 

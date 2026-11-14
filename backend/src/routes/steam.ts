@@ -165,7 +165,33 @@ const KNOWN_GAME_APPIDS: Record<string, number> = {
   'fallout 4': 377160,
   'skyrim special edition': 489830,
   'the elder scrolls v: skyrim': 72850,
+  'lego batman': 21000,
+  'lego batman: the videogame': 21000,
+  'lego batman the videogame': 21000,
+  'lego batman 2': 213330,
+  'lego batman 2: dc super heroes': 213330,
+  'lego batman 2 dc super heroes': 213330,
+  'lego batman 3': 313690,
+  'lego batman 3: beyond gotham': 313690,
+  'lego batman 3 beyond gotham': 313690,
+  'lego batman legacy of the dark knight': 21000,
+  'batman arkham asylum': 35140,
+  'batman arkham city': 200260,
+  'batman arkham origins': 209000,
+  'batman arkham knight': 208650,
 };
+
+export function cleanGameTitle(folderName: string): string {
+  if (!folderName) return '';
+  let title = folderName
+    .replace(/[._]/g, ' ')
+    .replace(/-?(InsaneRamZes|DODI|FitGirl|CODEX|RUNE|TENOKE|ElAmigos|SKIDROW|FLT|RELOADED|CPY|GOG|Razor1911)\b/gi, '')
+    .replace(/\b(Deluxe|Ultimate|Complete|Special|Enhanced|Standard|Definitive|Game of the Year|GOTY|Gold|Premium)\s*(Edition|Edit|Ed)?\b/gi, '')
+    .replace(/\b(Build\s*\d+|v\s*\d+(\.\d+)*|Repack|Multi\d+|Portable)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title || folderName;
+}
 
 function resolveAppIdByName(name: string): number | null {
   if (!name) return null;
@@ -177,6 +203,9 @@ function resolveAppIdByName(name: string): number | null {
 
   const noPunct = clean.replace(/[:\-_\.]/g, ' ').replace(/\s+/g, ' ').trim();
   if (KNOWN_GAME_APPIDS[noPunct]) return KNOWN_GAME_APPIDS[noPunct];
+
+  const cleanedTitle = cleanGameTitle(name).toLowerCase();
+  if (KNOWN_GAME_APPIDS[cleanedTitle]) return KNOWN_GAME_APPIDS[cleanedTitle];
 
   return null;
 }
@@ -375,7 +404,8 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
             const squashedFolder = normalizedFolder.replace(/[\s\-_]/g, '');
 
             if (!matchedCommonDirs.has(normalizedFolder) && !matchedCommonDirs.has(squashedFolder)) {
-              const resolvedAppId = resolveAppIdByName(folderName);
+              const cleanedName = cleanGameTitle(folderName);
+              const resolvedAppId = resolveAppIdByName(folderName) || resolveAppIdByName(cleanedName);
               const uniqueKey = resolvedAppId ? `steam_${resolvedAppId}` : `dir_${normalizedFolder}`;
 
               if (!seenGameKeys.has(uniqueKey)) {
@@ -385,7 +415,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
 
                 allGames.push({
                   appId: resolvedAppId,
-                  name: folderName,
+                  name: cleanedName,
                   installDir: folderName,
                   fullPath: gameFullPath,
                   displayPath: toCleanPath(gameFullPath),
@@ -1460,6 +1490,45 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
   };
 }
 
+export function isSafeGameFolderToDelete(targetPath: string): { safe: boolean; reason?: string; resolvedPath?: string } {
+  if (!targetPath || typeof targetPath !== 'string') {
+    return { safe: false, reason: 'Не указан путь к каталогу' };
+  }
+
+  const clean = toCleanPath(targetPath.trim().replace(/^["]+|["]+$/g, ''));
+  const internal = toInternalPath(clean);
+
+  // Normalize path
+  const normalized = path.resolve(internal).toLowerCase();
+
+  // Guard against dangerous root or system folders
+  const dangerous = [
+    '/', '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib64', '/media',
+    '/mnt', '/opt', '/proc', '/root', '/run', '/sbin', '/srv', '/sys', '/tmp', '/usr', '/var',
+    '/host_root', '/host_root/home', '/host_root/mnt', '/host_root/usr',
+    '/host_root/home/gamecube', '/host_root/home/deck',
+    '/home/gamecube', '/home/deck',
+    '/mnt/game_data',
+    '/mnt/game_data/steamlibrary',
+    '/mnt/game_data/steamlibrary/steamapps',
+    '/mnt/game_data/steamlibrary/steamapps/common',
+  ];
+
+  for (const d of dangerous) {
+    if (normalized === path.resolve(d).toLowerCase() || normalized === path.resolve(toInternalPath(d)).toLowerCase()) {
+      return { safe: false, reason: `Запрещено удалять системный или корневой каталог: ${clean}` };
+    }
+  }
+
+  // Must have at least 3 path segments
+  const parts = clean.split(/[/\\]/).filter(Boolean);
+  if (parts.length < 3) {
+    return { safe: false, reason: 'Слишком короткий путь каталога для безопасного удаления' };
+  }
+
+  return { safe: true, resolvedPath: internal };
+}
+
 export async function steamRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
 
@@ -1742,9 +1811,11 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Delete shortcut from shortcuts.vdf across all user directories
+  // Delete shortcut from shortcuts.vdf across all user directories (with optional disk deletion)
   fastify.delete('/shortcuts/:appId', async (request, reply) => {
     const { appId } = request.params as { appId: string };
+    const { deleteFiles, gamePath } = request.query as { deleteFiles?: string; gamePath?: string };
+    const shouldDeleteFiles = deleteFiles === 'true' || deleteFiles === '1';
     const targetId = parseInt(appId, 10);
     const allUserDirs = findAllSteamUserConfigDirs();
     if (allUserDirs.length === 0) {
@@ -1752,6 +1823,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
 
     let deletedAny = false;
+    let candidateDir: string | null = gamePath || null;
+
     for (const steamPaths of allUserDirs) {
       if (!fs.existsSync(steamPaths.shortcutsFile)) continue;
       try {
@@ -1767,6 +1840,11 @@ export async function steamRoutes(fastify: FastifyInstance) {
           if ((v as any).appid === targetId) {
             found = true;
             deletedAny = true;
+            if (!candidateDir) {
+              const startDir = ((v as any).StartDir || '').replace(/^["]+|["]+$/g, '');
+              const exe = ((v as any).Exe || '').replace(/^["]+|["]+$/g, '');
+              candidateDir = startDir || (exe ? path.dirname(exe) : null);
+            }
             continue;
           }
           newShortcuts[String(newIdx++)] = v;
@@ -1798,11 +1876,118 @@ export async function steamRoutes(fastify: FastifyInstance) {
     // Also remove from CompatToolMapping in config.vdf and localconfig.vdf
     removeCompatToolMapping(targetId);
 
+    // If requested, delete game folder completely from disk
+    let diskMessage = '';
+    if (shouldDeleteFiles && candidateDir) {
+      const check = isSafeGameFolderToDelete(candidateDir);
+      if (check.safe && check.resolvedPath && fs.existsSync(check.resolvedPath)) {
+        try {
+          console.log(`[Steam] User deleting game directory from disk: ${check.resolvedPath}`);
+          fs.rmSync(check.resolvedPath, { recursive: true, force: true });
+          diskMessage = ` и каталог «${toCleanPath(candidateDir)}» удален с накопителя`;
+        } catch (e: any) {
+          console.warn(`[Steam] Failed to delete directory ${candidateDir}:`, e.message);
+          diskMessage = ` (не удалось удалить файлы с диска: ${e.message})`;
+        }
+      }
+    }
+
+    // Auto-reload Game Mode
+    try {
+      reloadSteamGameMode();
+    } catch {}
+
     if (!deletedAny) {
       return reply.status(404).send({ error: 'Ярлык не найден в shortcuts.vdf' });
     }
 
-    return { message: 'Ярлык и обложки успешно удалены из Steam', appId: targetId };
+    return { message: `Ярлык и обложки успешно удалены из Steam${diskMessage}`, appId: targetId };
+  });
+
+  // Delete non-Steam local game folder directly from disk
+  fastify.post('/delete-local-game', async (request, reply) => {
+    const { path: rawPath, removeShortcuts = true } = request.body as {
+      path: string;
+      removeShortcuts?: boolean;
+    };
+
+    if (!rawPath) {
+      return reply.status(400).send({ error: 'Путь к каталогу игры обязателен' });
+    }
+
+    const check = isSafeGameFolderToDelete(rawPath);
+    if (!check.safe || !check.resolvedPath) {
+      return reply.status(400).send({ error: check.reason || 'Недопустимый каталог для удаления' });
+    }
+
+    if (!fs.existsSync(check.resolvedPath)) {
+      return reply.status(404).send({ error: `Каталог игры не найден на диске: ${rawPath}` });
+    }
+
+    try {
+      console.log(`[Steam] Deleting local game folder from disk: ${check.resolvedPath}`);
+      fs.rmSync(check.resolvedPath, { recursive: true, force: true });
+
+      // Clean up shortcuts pointing to this folder
+      if (removeShortcuts) {
+        const cleanTarget = toCleanPath(rawPath).toLowerCase();
+        const allUserDirs = findAllSteamUserConfigDirs();
+        for (const steamPaths of allUserDirs) {
+          if (!fs.existsSync(steamPaths.shortcutsFile)) continue;
+          try {
+            const buf = fs.readFileSync(steamPaths.shortcutsFile);
+            const parsed = parseBinaryVdf(buf);
+            const rawShortcuts = parsed.shortcuts || {};
+            const newShortcuts: Record<string, any> = {};
+            let newIdx = 0;
+            let modified = false;
+
+            for (const [k, v] of Object.entries(rawShortcuts)) {
+              const startDir = ((v as any).StartDir || '').replace(/^["]+|["]+$/g, '').toLowerCase();
+              const exe = ((v as any).Exe || '').replace(/^["]+|["]+$/g, '').toLowerCase();
+              if (startDir.includes(cleanTarget) || exe.includes(cleanTarget)) {
+                modified = true;
+                const sId = (v as any).appid;
+                if (sId) {
+                  removeCompatToolMapping(sId);
+                  if (fs.existsSync(steamPaths.gridDir)) {
+                    const shortId = String(sId);
+                    const longId = ((BigInt(sId) << 32n) | 0x02000000n).toString();
+                    for (const gf of fs.readdirSync(steamPaths.gridDir)) {
+                      if (gf.startsWith(shortId) || gf.startsWith(longId)) {
+                        try {
+                          fs.unlinkSync(path.join(steamPaths.gridDir, gf));
+                        } catch {}
+                      }
+                    }
+                  }
+                }
+                continue;
+              }
+              newShortcuts[String(newIdx++)] = v;
+            }
+
+            if (modified) {
+              parsed.shortcuts = newShortcuts;
+              fs.writeFileSync(steamPaths.shortcutsFile, serializeBinaryVdf(parsed));
+            }
+          } catch {}
+        }
+      }
+
+      try {
+        reloadSteamGameMode();
+      } catch {}
+
+      return {
+        success: true,
+        message: `Каталог игры «${toCleanPath(rawPath)}» успешно удален с диска`,
+      };
+    } catch (err: any) {
+      return reply.status(500).send({
+        error: `Не удалось удалить каталог игры: ${err.message}`,
+      });
+    }
   });
 
   // Restart Steam client on host to reload shortcuts and artworks in Game Mode

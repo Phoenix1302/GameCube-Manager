@@ -65,7 +65,7 @@ export const Navbar: React.FC = () => {
                     {isAdmin ? 'ADMIN' : 'PORTAL'}
                   </span>
                   <span className="hidden sm:inline-block text-[10px] text-slate-400 font-mono font-medium">
-                    v1.0.1
+                    v1.1.1
                   </span>
                 </span>
               </div>

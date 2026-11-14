@@ -23,7 +23,7 @@ echo " ██║  ███╗███████║██╔████╔�
 echo " ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  "
 echo " ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗╚██████╗╚██████╔╝██████╔╝███████╗"
 echo "  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝"
-echo -e "                   Steam Machine Control Center v1.0.1${NC}\n"
+echo -e "                   Steam Machine Control Center v1.1.1${NC}\n"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_USER="$(whoami)"
@@ -136,14 +136,14 @@ echo -e "    ${GREEN}✔${NC} Enabled systemd lingering for user ${CURRENT_USER}
 echo -e "\n${BLUE}==>${NC} ${BOLD}5. Building container images...${NC}"
 cd "$SCRIPT_DIR"
 
-echo -e "    - Building ${BOLD}gamecube-manager:1.0.1${NC} (Frontend + Backend)..."
-podman build -t localhost/gamecube-manager:1.0.1 .
+echo -e "    - Building ${BOLD}gamecube-manager:1.1.1${NC} (Frontend + Backend)..."
+podman build -t localhost/gamecube-manager:1.1.1 .
 
-echo -e "    - Building ${BOLD}gamecube-torrent:1.0.1${NC} (Headless qBittorrent)..."
-podman build -t localhost/gamecube-torrent:1.0.1 deploy/qbittorrent
+echo -e "    - Building ${BOLD}gamecube-torrent:1.1.1${NC} (Headless qBittorrent)..."
+podman build -t localhost/gamecube-torrent:1.1.1 deploy/qbittorrent
 
-echo -e "    - Building ${BOLD}gamecube-proxy:1.0.1${NC} (Nginx SSL Reverse Proxy)..."
-podman build -t localhost/gamecube-proxy:1.0.1 deploy/nginx
+echo -e "    - Building ${BOLD}gamecube-proxy:1.1.1${NC} (Nginx SSL Reverse Proxy)..."
+podman build -t localhost/gamecube-proxy:1.1.1 deploy/nginx
 
 echo -e "    ${GREEN}✔${NC} All container images built successfully."
 
@@ -180,7 +180,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-web
 Pod=gamecube.pod
-Image=localhost/gamecube-manager:1.0.1
+Image=localhost/gamecube-manager:1.1.1
 PodmanArgs=--pid=host
 Volume=/:/host_root:rslave
 Volume=gamecube-data:/app/backend/data:rw
@@ -211,7 +211,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-torrent
 Pod=gamecube.pod
-Image=localhost/gamecube-torrent:1.0.1
+Image=localhost/gamecube-torrent:1.1.1
 Volume=${DOWNLOADS_DIR}:/downloads:rw
 Volume=gamecube-torrent-config:/config:rw
 ${GAME_DATA_VOL}
@@ -234,7 +234,7 @@ Requires=gamecube-pod.service
 [Container]
 ContainerName=gamecube-proxy
 Pod=gamecube.pod
-Image=localhost/gamecube-proxy:1.0.1
+Image=localhost/gamecube-proxy:1.1.1
 Volume=gamecube-certs:/etc/nginx/certs:rw
 
 [Service]

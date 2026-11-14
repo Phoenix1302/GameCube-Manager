@@ -25,12 +25,14 @@ import {
   Copy,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useConfirm } from '../context/ConfirmContext';
 import { TorrentItem, TorrentTransfer, RutrackerRelease } from '../types';
 import { TorrentDisclaimer } from '../components/TorrentDisclaimer';
 
 export const Torrents: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { alert } = useConfirm();
   const [torrents, setTorrents] = useState<TorrentItem[]>([]);
   const [transfer, setTransfer] = useState<TorrentTransfer>({ dlSpeed: 0, upSpeed: 0, dlTotal: 0, upTotal: 0 });
   const [connected, setConnected] = useState(false);
@@ -67,7 +69,11 @@ export const Torrents: React.FC = () => {
         setTimeout(() => setRuCopiedId(null), 3000);
       }
     } catch (err: any) {
-      alert(`Не удалось скопировать magnet-ссылку: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка',
+        message: `Не удалось скопировать magnet-ссылку: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     } finally {
       setRuCopyingId(null);
     }
@@ -116,7 +122,11 @@ export const Torrents: React.FC = () => {
       loadTorrents();
       setTimeout(() => setRuStatusMsg(null), 5000);
     } catch (err: any) {
-      alert(`Ошибка добавления торрента: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка',
+        message: `Ошибка добавления торрента: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     } finally {
       setRuDownloadingId(null);
     }
@@ -174,7 +184,11 @@ export const Torrents: React.FC = () => {
       setShowAddModal(false);
       loadTorrents();
     } catch (err: any) {
-      alert(`Ошибка добавления торрента: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка',
+        message: `Ошибка добавления торрента: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     } finally {
       setSubmitting(false);
     }

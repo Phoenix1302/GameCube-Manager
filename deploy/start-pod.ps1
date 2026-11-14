@@ -25,21 +25,21 @@ podman run -d `
     -e NODE_ENV=production `
     -e HOST_ROOT=/host_root `
     -e QBITTORRENT_URL=http://127.0.0.1:8085 `
-    localhost/gamecube-manager:1.0.1
+    localhost/gamecube-manager:1.1.1
 
 Write-Host "==> Starting Headless qBittorrent Container (Internal WebUI 8085 / Peer 6882)..." -ForegroundColor Cyan
 podman run -d `
     --name gamecube-torrent `
     --pod $podName `
     --restart=always `
-    localhost/gamecube-torrent:1.0.0
+    localhost/gamecube-torrent:1.1.1
 
 Write-Host "==> Starting Nginx SSL Proxy..." -ForegroundColor Cyan
 podman run -d `
     --name gamecube-proxy `
     --pod $podName `
     --restart=always `
-    localhost/gamecube-proxy:1.0.0
+    localhost/gamecube-proxy:1.1.1
 
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green

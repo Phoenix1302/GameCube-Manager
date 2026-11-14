@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 interface CacheStats {
   imageCount: number;
@@ -38,6 +39,7 @@ interface CacheStats {
 
 export const Settings: React.FC = () => {
   const { isAdmin, user } = useAuth();
+  const { confirm, alert } = useConfirm();
   const [settings, setSettings] = useState<Record<string, string>>({
     qbittorrent_url: 'http://127.0.0.1:8080',
     qbittorrent_user: 'admin',
@@ -93,8 +95,15 @@ export const Settings: React.FC = () => {
   };
 
   const handleCleanCache = async (type: 'images' | 'all') => {
-    if (type === 'all' && !window.confirm('Очистить весь кэш, включая данные каталога и базу? После этого изображения и списки загрузятся заново при открытии.')) {
-      return;
+    if (type === 'all') {
+      const res = await confirm({
+        title: 'Очистка кэша',
+        message: 'Очистить весь кэш, включая данные каталога и базу? После этого изображения и списки загрузятся заново при открытии.',
+        confirmText: 'Очистить весь кэш',
+        cancelText: 'Отмена',
+        variant: 'warning',
+      });
+      if (!res.confirmed) return;
     }
     setCleaningCache(true);
     setCleanResult(null);
@@ -138,7 +147,11 @@ export const Settings: React.FC = () => {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      alert(`Ошибка сохранения настроек: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка сохранения настроек',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     } finally {
       setSaving(false);
     }
@@ -216,7 +229,7 @@ export const Settings: React.FC = () => {
           </h1>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30">
-              v1.0.1
+              v1.1.1
             </span>
             <span className="text-sm text-slate-400">
               {isAdmin

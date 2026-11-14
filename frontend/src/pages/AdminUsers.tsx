@@ -17,6 +17,7 @@ import {
 import { api } from '../services/api';
 import { User } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 function formatUserDate(dateStr?: string | null): string {
   if (!dateStr || dateStr === '—' || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') {
@@ -38,6 +39,7 @@ function formatUserDate(dateStr?: string | null): string {
 
 export const AdminUsers: React.FC = () => {
   const { user: currentUser } = useAuth();
+  const { confirm, alert } = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,7 +97,11 @@ export const AdminUsers: React.FC = () => {
       setNewRole('user');
       loadUsers();
     } catch (err: any) {
-      alert(`Ошибка: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     } finally {
       setCreating(false);
     }
@@ -115,7 +121,11 @@ export const AdminUsers: React.FC = () => {
       setTargetUser(null);
       setUpdatedPassword('');
     } catch (err: any) {
-      alert(`Ошибка смены пароля: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка смены пароля',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     } finally {
       setChangingPass(false);
     }
@@ -129,7 +139,11 @@ export const AdminUsers: React.FC = () => {
       setDeleteTarget(null);
       loadUsers();
     } catch (err: any) {
-      alert(`Ошибка удаления: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка удаления',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -139,7 +153,14 @@ export const AdminUsers: React.FC = () => {
       target.role === 'admin'
         ? `Понизить пользователя «${target.username}» до обычного пользователя?`
         : `Назначить пользователя «${target.username}» администратором?`;
-    if (!window.confirm(confirmMsg)) return;
+    const res = await confirm({
+      title: 'Смена роли пользователя',
+      message: confirmMsg,
+      confirmText: 'Изменить роль',
+      cancelText: 'Отмена',
+      variant: target.role === 'admin' ? 'warning' : 'primary',
+    });
+    if (!res.confirmed) return;
 
     try {
       await api.put(`/users/${target.id}/role`, { role: newRole });
@@ -151,7 +172,11 @@ export const AdminUsers: React.FC = () => {
       });
       loadUsers();
     } catch (err: any) {
-      alert(`Ошибка изменения роли: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка изменения роли',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     }
   };
 

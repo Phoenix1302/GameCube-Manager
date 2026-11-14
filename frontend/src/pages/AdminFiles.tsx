@@ -25,10 +25,12 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useConfirm } from '../context/ConfirmContext';
 import { FileItem } from '../types';
 
 export const AdminFiles: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const { confirm, alert } = useConfirm();
   const [currentPath, setCurrentPath] = useState<string>('');
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [rootPath, setRootPath] = useState<string>('');
@@ -68,7 +70,11 @@ export const AdminFiles: React.FC = () => {
       setRootPath(res.data.root);
       setItems(res.data.items || []);
     } catch (err: any) {
-      alert(`Ошибка чтения директории: ${err.response?.data?.message || err.message}`);
+      await alert({
+        title: 'Ошибка чтения директории',
+        message: err.response?.data?.message || err.message,
+        variant: 'danger',
+      });
     } finally {
       setLoading(false);
     }
@@ -91,7 +97,11 @@ export const AdminFiles: React.FC = () => {
         content: res.data.content,
       });
     } catch (err: any) {
-      alert(`Не удалось открыть файл: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка открытия файла',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -106,7 +116,11 @@ export const AdminFiles: React.FC = () => {
       setEditingFile(null);
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(`Ошибка сохранения файла: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка сохранения файла',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setSavingFile(false);
     }
@@ -122,7 +136,11 @@ export const AdminFiles: React.FC = () => {
       setShowMkdir(false);
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(`Ошибка создания папки: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка создания папки',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -140,7 +158,11 @@ export const AdminFiles: React.FC = () => {
       setNewFileName('');
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(`Ошибка переименования: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка переименования',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -151,7 +173,11 @@ export const AdminFiles: React.FC = () => {
       setDeleteTarget(null);
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(`Ошибка удаления: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка удаления',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     }
   };
 
@@ -167,7 +193,11 @@ export const AdminFiles: React.FC = () => {
       await api.post('/files/upload', formData);
       loadFiles(currentPath);
     } catch (err: any) {
-      alert(`Ошибка загрузки файлов: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка загрузки файлов',
+        message: err.response?.data?.error || err.message,
+        variant: 'danger',
+      });
     } finally {
       setUploading(false);
     }

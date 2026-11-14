@@ -22,6 +22,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useConfirm } from '../context/ConfirmContext';
 import { GameDetails, RutrackerRelease } from '../types';
 
 interface GameModalProps {
@@ -37,6 +38,7 @@ export const GameModal: React.FC<GameModalProps> = ({
   onAddedToWishlist,
   showWishlistButton = true,
 }) => {
+  const { alert } = useConfirm();
   const [details, setDetails] = useState<GameDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [wishlistSuccess, setWishlistSuccess] = useState<string | null>(null);
@@ -66,7 +68,11 @@ export const GameModal: React.FC<GameModalProps> = ({
         setTimeout(() => setCopiedTopicId(null), 3000);
       }
     } catch (err: any) {
-      alert(`Не удалось скопировать magnet-ссылку: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка',
+        message: `Не удалось скопировать magnet-ссылку: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     } finally {
       setCopyingTopicId(null);
     }
@@ -119,7 +125,11 @@ export const GameModal: React.FC<GameModalProps> = ({
       setDownloadMessage(`Раздача «${release.title.substring(0, 50)}...» отправлена в qBittorrent!`);
       setTimeout(() => setDownloadMessage(null), 5000);
     } catch (err: any) {
-      alert(`Ошибка добавления торрента: ${err.response?.data?.error || err.message}`);
+      await alert({
+        title: 'Ошибка торрента',
+        message: `Ошибка добавления торрента: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     } finally {
       setDownloadingTopicId(null);
     }

@@ -105,7 +105,7 @@ export const Setup: React.FC = () => {
               GAMECUBE MANAGER
             </h1>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-steam-cyan/20 text-steam-cyan border border-steam-cyan/40">
-              v1.0.1
+              v1.1.1
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">

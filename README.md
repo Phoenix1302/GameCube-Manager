@@ -1,4 +1,4 @@
-# GameCube-Manager 🎮 (v1.0.1 Release)
+# GameCube-Manager 🎮 (v1.1.1 Release)
 
 Полнофункциональная веб-панель управления и игровой портал для кастомной Steam Machine на базе **Fedora Linux / Fedora Silverblue / Bazzite + KDE Plasma + SteamOS helper scripts**.
 

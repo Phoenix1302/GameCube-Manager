@@ -71,7 +71,7 @@ async function startServer() {
   // Health check
   fastify.get('/api/health', async () => ({
     status: 'ok',
-    version: '1.0.1',
+    version: '1.1.1',
     timestamp: new Date().toISOString(),
   }));
 

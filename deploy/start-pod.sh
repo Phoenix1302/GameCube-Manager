@@ -88,7 +88,7 @@ podman run -d \
     -e HOST_ROOT=/host_root \
     -e STEAM_USERDATA_PATH="${STEAM_USERDATA_PATH}" \
     -e QBITTORRENT_URL=http://127.0.0.1:8085 \
-    localhost/gamecube-manager:1.0.1
+    localhost/gamecube-manager:1.1.1
 
 # 3. Run Headless qBittorrent inside the Pod
 echo "==> Starting Headless qBittorrent container '${TORRENT_CONTAINER}'..."
@@ -99,7 +99,7 @@ podman run -d \
     --security-opt label=disable \
     -v "${DOWNLOADS_DIR}:/downloads:rw" \
     -v "gamecube-torrent-config:/config:rw" \
-    localhost/gamecube-torrent:1.0.0
+    localhost/gamecube-torrent:1.1.1
 
 # 4. Run Nginx Reverse Proxy with SSL inside the Pod
 echo "==> Starting Nginx SSL proxy container '${PROXY_CONTAINER}'..."
@@ -108,7 +108,7 @@ podman run -d \
     --pod "${POD_NAME}" \
     --restart=always \
     -v "gamecube-certs:/etc/nginx/certs:rw" \
-    localhost/gamecube-proxy:1.0.0
+    localhost/gamecube-proxy:1.1.1
 
 LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 
