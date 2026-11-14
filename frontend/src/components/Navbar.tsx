@@ -31,10 +31,9 @@ export const Navbar: React.FC = () => {
     { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
-  // Navigation for administrator (Management suite + Gaming & Files)
+  // Navigation for administrator (Management suite + Files)
   const adminNavItems = [
     { name: 'Мониторинг', path: '/admin/monitoring', icon: Activity },
-    { name: 'Steam Library', path: '/steam', icon: FolderSync },
     { name: 'Торренты', path: '/torrents', icon: DownloadCloud },
     { name: 'Файлы', path: '/files', icon: FolderTree },
     { name: 'Терминал', path: '/admin/terminal', icon: Terminal },
