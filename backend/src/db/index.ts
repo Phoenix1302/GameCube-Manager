@@ -175,6 +175,14 @@ export function initDb() {
     `);
   } catch {}
 
+  // Flush stale browse_cache rows and corrupted hashed header paths from earlier builds
+  try {
+    db.exec(`
+      DELETE FROM browse_cache;
+      DELETE FROM game_cache WHERE header_image LIKE '%/header.jpg%' AND (header_image LIKE '%/store_item_assets/steam/apps/%/%/%');
+    `);
+  } catch {}
+
   // Check if system has been initialized with an administrator
   if (isSystemInitialized()) {
     console.log('[DB] System is initialized. Administrator account exists.');

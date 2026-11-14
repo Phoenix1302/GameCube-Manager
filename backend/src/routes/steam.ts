@@ -95,6 +95,12 @@ function isTechnicalOrJunk(name?: string, installDir?: string, appId?: number | 
       'openvr',
       'steamvr',
       'steamlinux',
+      'sniper',
+      'soldier',
+      'scout',
+      'medic',
+      'pressurevessel',
+      'pressure-vessel',
     ];
 
     return junkKeywords.some((kw) => squashed.includes(kw) || lower.includes(kw));
@@ -1268,6 +1274,192 @@ async function autoCreateShortcut(params: {
   };
 }
 
+export function findSteamOsHelperScripts(): string[] {
+  const found: string[] = [];
+  const checked = new Set<string>();
+
+  const check = (p: string) => {
+    if (!p || checked.has(p)) return;
+    checked.add(p);
+    try {
+      if (fs.existsSync(p)) {
+        found.push(p);
+      }
+    } catch {}
+  };
+
+  // 1. Manually configured helper script path in settings
+  const configured = settingsQueries.get('steamos_helper_script', '');
+  if (configured) {
+    check(toInternalPath(configured));
+    check(configured);
+  }
+
+  // 2. Standard SteamOS / Bazzite system scripts
+  const standard = [
+    '/host_root/usr/bin/steamos-session-select',
+    '/host_root/usr/local/bin/steamos-session-select',
+    '/host_root/usr/bin/steamosctl',
+    '/host_root/usr/local/bin/restart-gamescope',
+    '/host_root/usr/bin/restart-gamescope',
+    '/host_root/usr/local/bin/restart-steam',
+    '/host_root/usr/bin/restart-steam',
+    '/host_root/usr/bin/gamescope-session-steam',
+    '/host_root/usr/bin/gamescope-session',
+  ];
+  standard.forEach(check);
+
+  // 3. Scan /usr/local/bin for custom helper scripts
+  try {
+    const localBin = '/host_root/usr/local/bin';
+    if (fs.existsSync(localBin)) {
+      for (const f of fs.readdirSync(localBin)) {
+        const lower = f.toLowerCase();
+        if (lower.includes('steam') || lower.includes('gamescope') || lower.includes('gamemode') || lower.includes('session')) {
+          check(path.join(localBin, f));
+        }
+      }
+    }
+  } catch {}
+
+  // 4. Scan user directories under /home/* (e.g. /home/gamecube/bin, ~/.local/bin, ~/...)
+  try {
+    const homeRoot = '/host_root/home';
+    if (fs.existsSync(homeRoot)) {
+      const users = fs.readdirSync(homeRoot, { withFileTypes: true }).filter((d) => d.isDirectory());
+      for (const u of users) {
+        const uDir = path.join(homeRoot, u.name);
+        const subDirs = [
+          path.join(uDir, 'bin'),
+          path.join(uDir, '.local', 'bin'),
+          uDir,
+        ];
+        for (const s of subDirs) {
+          if (fs.existsSync(s)) {
+            try {
+              for (const f of fs.readdirSync(s)) {
+                const lower = f.toLowerCase();
+                if (
+                  lower.endsWith('.sh') ||
+                  lower.includes('steam') ||
+                  lower.includes('gamescope') ||
+                  lower.includes('gamemode')
+                ) {
+                  check(path.join(s, f));
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+  } catch {}
+
+  return found;
+}
+
+export function reloadSteamGameMode(): { success: boolean; methods: string[]; message: string } {
+  if (config.isWindows) {
+    return {
+      success: true,
+      methods: ['windows'],
+      message: 'Windows: перезапустите Steam вручную для применения изменений',
+    };
+  }
+
+  const executed: string[] = [];
+
+  // Find active desktop user from /run/user/ (e.g. 1000 -> gamecube / deck)
+  let activeUid = '1000';
+  let activeUser = 'gamecube';
+
+  try {
+    const runUserDir = '/host_root/run/user';
+    if (fs.existsSync(runUserDir)) {
+      const uids = fs.readdirSync(runUserDir).filter((d) => /^\d+$/.test(d) && d !== '0');
+      if (uids.length > 0) {
+        activeUid = uids[0];
+      }
+    }
+  } catch {}
+
+  try {
+    const passwdPath = '/host_root/etc/passwd';
+    if (fs.existsSync(passwdPath)) {
+      const lines = fs.readFileSync(passwdPath, 'utf-8').split('\n');
+      for (const line of lines) {
+        const parts = line.split(':');
+        if (parts[2] === activeUid) {
+          activeUser = parts[0];
+          break;
+        }
+      }
+    }
+  } catch {}
+
+  // 1. First priority: Execute detected helper scripts for SteamOS / Gamescope
+  const helpers = findSteamOsHelperScripts();
+  console.log(`[Steam] Found helper scripts on host (user: ${activeUser}, UID: ${activeUid}):`, helpers);
+
+  for (const script of helpers) {
+    const hostPath = toCleanPath(script);
+    const basename = path.basename(script);
+
+    try {
+      if (basename === 'steamos-session-select') {
+        console.log(`[Steam] Executing: steamos-session-select gamescope`);
+        execSync(`chroot /host_root ${hostPath} gamescope 2>/dev/null || true`, { timeout: 4000, stdio: 'ignore' });
+        executed.push(`steamos-session-select gamescope`);
+      } else if (basename !== 'gamescope-session-steam' && basename !== 'gamescope-session') {
+        // Run custom user helper script directly as active user
+        console.log(`[Steam] Executing custom helper: ${hostPath}`);
+        execSync(
+          `chroot /host_root runuser -u ${activeUser} -- ${hostPath} 2>/dev/null || chroot /host_root ${hostPath} 2>/dev/null || true`,
+          { timeout: 5000, stdio: 'ignore' }
+        );
+        executed.push(basename);
+      }
+    } catch (err: any) {
+      console.warn(`[Steam] Helper script ${basename} failed:`, err.message);
+    }
+  }
+
+  // 2. Restart Gamescope session cleanly through user systemd (keeps Gamescope compositor alive)
+  try {
+    console.log(`[Steam] Restarting gamescope-session via systemd --user for ${activeUser}...`);
+    execSync(
+      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session 2>/dev/null || ` +
+      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-steam 2>/dev/null || true`,
+      { timeout: 4000, stdio: 'ignore' }
+    );
+    executed.push('systemctl --user restart gamescope-session');
+  } catch {}
+
+  // 3. Ensure Gamescope is the selected session for SteamOS
+  const hasSessionSelect = fs.existsSync('/host_root/usr/bin/steamos-session-select') || fs.existsSync('/host_root/usr/local/bin/steamos-session-select');
+  if (hasSessionSelect) {
+    try {
+      execSync('chroot /host_root steamos-session-select gamescope 2>/dev/null || true', { timeout: 3000, stdio: 'ignore' });
+      executed.push('steamos-session-select gamescope');
+    } catch {}
+  }
+
+  // 4. Clean graceful steam -shutdown (NEVER use pkill -f "/steam", which kills gamescope-session-steam and crashes SDDM!)
+  try {
+    execSync(`chroot /host_root runuser -u ${activeUser} -- steam -shutdown 2>/dev/null || chroot /host_root steam -shutdown 2>/dev/null || true`, {
+      timeout: 3000,
+      stdio: 'ignore',
+    });
+    executed.push('steam -shutdown');
+  } catch {}
+
+  return {
+    success: true,
+    methods: executed,
+    message: `Команда отправлена через композитор Gamescope (${executed.join(', ') || 'steam -shutdown'}). Интерфейс перезапустится в Game Mode без вылета в SDDM.`,
+  };
+}
+
 export async function steamRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
 
@@ -1535,18 +1727,13 @@ export async function steamRoutes(fastify: FastifyInstance) {
         customArtwork,
       });
 
-      // Automatically trigger reload in SteamOS on the fly
+      // Automatically trigger safe reload in SteamOS on the fly via compositor
       if (!config.isWindows) {
         try {
-          execSync('chroot /host_root steam -shutdown 2>/dev/null || true', { timeout: 2000, stdio: 'ignore' });
-          execSync(
-            'chroot /host_root pkill -15 -f "/steam" 2>/dev/null || ' +
-            'chroot /host_root pkill -15 -x steam 2>/dev/null || ' +
-            'pkill -15 -f "/steam" 2>/dev/null || ' +
-            'pkill -15 -x steam 2>/dev/null || true',
-            { timeout: 2000, stdio: 'ignore' }
-          );
-        } catch {}
+          reloadSteamGameMode();
+        } catch (e: any) {
+          console.warn('[Steam] Auto reload game mode failed:', e.message);
+        }
       }
 
       return result;
@@ -1620,55 +1807,13 @@ export async function steamRoutes(fastify: FastifyInstance) {
 
   // Restart Steam client on host to reload shortcuts and artworks in Game Mode
   fastify.post('/restart-steam', async (request, reply) => {
-    if (config.isWindows) {
-      return { success: true, message: 'Windows: перезапустите Steam вручную для применения изменений' };
-    }
-
     try {
-      console.log('[Steam] Triggering host Steam client reload...');
-
-      // 1. Try graceful steam -shutdown
-      try {
-        execSync('chroot /host_root steam -shutdown 2>/dev/null || true', { timeout: 3000, stdio: 'ignore' });
-      } catch {}
-
-      // 2. Terminate steam processes via SIGTERM so gamescope-session immediately revives Steam
-      try {
-        execSync(
-          'chroot /host_root pkill -15 -f "/steam" 2>/dev/null || ' +
-          'chroot /host_root pkill -15 -x steam 2>/dev/null || ' +
-          'pkill -15 -f "/steam" 2>/dev/null || ' +
-          'pkill -15 -x steam 2>/dev/null || true',
-          { timeout: 3000, stdio: 'ignore' }
-        );
-      } catch {}
-
-      // 3. Fallback: if SteamOS user session systemd unit is available
-      try {
-        execSync('chroot /host_root systemctl --user restart gamescope-session-steam 2>/dev/null || true', {
-          timeout: 2000,
-          stdio: 'ignore',
-        });
-      } catch {}
-
-      // 4. Force kill fallback after 1.5s if process is still hung
-      setTimeout(() => {
-        try {
-          execSync(
-            'chroot /host_root pkill -9 -x steam 2>/dev/null || ' +
-            'pkill -9 -x steam 2>/dev/null || true',
-            { timeout: 2000, stdio: 'ignore' }
-          );
-        } catch {}
-      }, 1500);
-
-      return {
-        success: true,
-        message: 'Команда перезапуска Steam отправлена. SteamOS обновит библиотеку на лету за пару секунд.',
-      };
+      console.log('[Steam] Triggering compositor-safe Game Mode reload...');
+      const result = reloadSteamGameMode();
+      return result;
     } catch (err: any) {
       return reply.status(500).send({
-        error: 'Не удалось отправить команду перезапуска',
+        error: 'Не удалось отправить команду перезапуска в Gamescope',
         details: err.message,
       });
     }

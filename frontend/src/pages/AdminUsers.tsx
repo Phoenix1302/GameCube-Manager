@@ -18,6 +18,24 @@ import { api } from '../services/api';
 import { User } from '../types';
 import { useAuth } from '../context/AuthContext';
 
+function formatUserDate(dateStr?: string | null): string {
+  if (!dateStr || dateStr === '—' || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') {
+    return 'Недавно';
+  }
+  try {
+    const clean = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+    const d = new Date(clean);
+    if (isNaN(d.getTime())) return 'Недавно';
+    return d.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch {
+    return 'Недавно';
+  }
+}
+
 export const AdminUsers: React.FC = () => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -192,13 +210,7 @@ export const AdminUsers: React.FC = () => {
             };
             const isCurrent = currentUser?.id === u.id;
             const regDate = u.createdAt || (u as any).created_at;
-            const formattedDate = regDate
-              ? new Date(regDate).toLocaleDateString('ru-RU', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                })
-              : 'Недавно';
+            const formattedDate = formatUserDate(regDate);
 
             return (
               <div
@@ -304,13 +316,7 @@ export const AdminUsers: React.FC = () => {
                   };
                   const isCurrent = currentUser?.id === u.id;
                   const regDate = u.createdAt || (u as any).created_at;
-                  const formattedDate = regDate
-                    ? new Date(regDate).toLocaleDateString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      })
-                    : 'Недавно';
+                  const formattedDate = formatUserDate(regDate);
 
                   return (
                     <tr key={u.id} className="hover:bg-steam-cardHover/50 transition-colors">

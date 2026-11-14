@@ -66,9 +66,11 @@ function getShellExecution(): { file: string; args: string[]; cwd: string; env: 
     // Launch interactive non-login shell with user's .bashrc.
     // Avoid -l / --login because Fedora's /etc/profile runs ttyname (which fails inside chroot)
     // and attempts to access /root/.bash_profile (which is inaccessible to rootless host user 1000).
-    const args = ['/host_root', '/bin/bash'];
+    const args = ['/host_root', '/bin/bash', '--noprofile'];
     if (fs.existsSync(bashrcPath)) {
       args.push('--rcfile', `${userHome}/.bashrc`);
+    } else if (fs.existsSync('/host_root/etc/bashrc')) {
+      args.push('--rcfile', '/etc/bashrc');
     }
     args.push('-i');
 
@@ -94,12 +96,13 @@ function getShellExecution(): { file: string; args: string[]; cwd: string; env: 
   const fallbackShell = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
   return {
     file: fallbackShell,
-    args: ['-i'],
+    args: ['--noprofile', '-i'],
     cwd: fs.existsSync('/host_root') ? '/host_root' : '/',
     env: {
       ...(process.env as Record<string, string>),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
+      MESG: 'n',
     },
   };
 }

@@ -43,6 +43,7 @@ export const Settings: React.FC = () => {
     qbittorrent_user: 'admin',
     qbittorrent_pass: '',
     steamgriddb_api_key: '',
+    steamos_helper_script: '',
     steam_userdata_path: '/home/gamecube/.local/share/Steam/userdata',
     host_root: '/',
     cache_max_size_mb: '500',
@@ -577,6 +578,22 @@ export const Settings: React.FC = () => {
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
                   Используется для чтения и сохранения ярлыков <code>shortcuts.vdf</code> и постеров в <code>grid/</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Пользовательский скрипт перезапуска SteamOS / Gamescope (опционально)
+                </label>
+                <input
+                  type="text"
+                  value={settings.steamos_helper_script || ''}
+                  onChange={(e) => handleChange('steamos_helper_script', e.target.value)}
+                  placeholder="/usr/local/bin/restart-steam.sh или steamos-session-select"
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Если указан путь к вашему скрипту, он будет вызываться для безопасного перезапуска Game Mode через композитор Gamescope без сброса в окно SDDM.
                 </p>
               </div>
 

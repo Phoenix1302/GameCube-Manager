@@ -94,11 +94,12 @@ export function serializeBinaryVdf(data: Record<string, any>): Buffer {
 
       if (typeof val === 'object') {
         writeMap(subKey, val);
-      } else if (typeof val === 'number') {
+      } else if (typeof val === 'number' || (typeof val === 'string' && subKey === 'appid' && /^\d+$/.test(val))) {
         buffers.push(Buffer.from([0x02]));
         writeString(subKey);
         const intBuf = Buffer.alloc(4);
-        intBuf.writeInt32LE(val | 0, 0);
+        const num = Number(val);
+        intBuf.writeInt32LE(num | 0, 0);
         buffers.push(intBuf);
       } else {
         buffers.push(Buffer.from([0x01]));

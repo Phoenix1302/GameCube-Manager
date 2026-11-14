@@ -479,6 +479,13 @@ export const SteamLibrary: React.FC = () => {
     const technical = [
       'steamlinuxruntime',
       'linuxruntime',
+      'steamlinux',
+      'sniper',
+      'soldier',
+      'scout',
+      'medic',
+      'pressurevessel',
+      'pressure-vessel',
       'proton',
       'steamworks',
       'steamcontroller',
