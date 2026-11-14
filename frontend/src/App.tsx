@@ -59,18 +59,6 @@ const AdminRoute: React.FC<{ children: React.ReactElement }> = ({ children }) =>
   return children;
 };
 
-const UserRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  const { isAdmin, isLoading } = useAuth();
-
-  if (isLoading) return null;
-
-  if (isAdmin) {
-    return <Navigate to="/admin/monitoring" replace />;
-  }
-
-  return children;
-};
-
 const HomeRoute: React.FC = () => {
   const { isAdmin, isLoading } = useAuth();
 
@@ -95,26 +83,15 @@ export const App: React.FC = () => {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<HomeRoute />} />
 
-            {/* User Gaming Routes (restricted from admin) */}
-            <Route
-              path="/wishlist"
-              element={
-                <UserRoute>
-                  <Wishlist />
-                </UserRoute>
-              }
-            />
-            <Route
-              path="/steam"
-              element={
-                <UserRoute>
-                  <SteamLibrary />
-                </UserRoute>
-              }
-            />
+            {/* Gaming & Steam Routes (accessible by both regular users and admin) */}
+            <Route path="/discover" element={<Discover />} />
+            <Route path="/wishlist" element={<Wishlist />} />
+            <Route path="/steam" element={<SteamLibrary />} />
 
-            {/* Shared Route: Torrents (accessible by both regular users and admin) */}
+            {/* Shared Route: Torrents & File Manager */}
             <Route path="/torrents" element={<Torrents />} />
+            <Route path="/files" element={<AdminFiles />} />
+            <Route path="/admin/files" element={<AdminFiles />} />
 
             {/* Settings Route */}
             <Route path="/settings" element={<Settings />} />
@@ -125,14 +102,6 @@ export const App: React.FC = () => {
               element={
                 <AdminRoute>
                   <AdminMonitoring />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="/admin/files"
-              element={
-                <AdminRoute>
-                  <AdminFiles />
                 </AdminRoute>
               }
             />

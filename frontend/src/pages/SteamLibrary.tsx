@@ -40,6 +40,7 @@ export const SteamLibrary: React.FC = () => {
   const [libraries, setLibraries] = useState<any[]>([]);
   const [loadingInstalled, setLoadingInstalled] = useState(true);
   const [installedSearch, setInstalledSearch] = useState('');
+  const [selectedLibraryPath, setSelectedLibraryPath] = useState<string | null>(null);
 
   // Existing shortcuts
   const [shortcuts, setShortcuts] = useState<SteamShortcut[]>([]);
@@ -448,11 +449,38 @@ export const SteamLibrary: React.FC = () => {
     openSmartModal(game);
   };
 
-  const filteredInstalled = installedGames.filter(
-    (g) =>
+  const isTechnicalGame = (game: any): boolean => {
+    const name = (game.name || '').toLowerCase().replace(/[\s\-_.]/g, '');
+    const dir = (game.installDir || '').toLowerCase().replace(/[\s\-_.]/g, '');
+    const technical = [
+      'steamlinuxruntime',
+      'linuxruntime',
+      'proton',
+      'steamworks',
+      'steamcontroller',
+      'redistributables',
+      'shadercache',
+      'steamvr',
+    ];
+    return technical.some((t) => name.includes(t) || dir.includes(t));
+  };
+
+  const filteredInstalled = installedGames.filter((g) => {
+    if (isTechnicalGame(g)) return false;
+
+    const matchesSearch =
       g.name.toLowerCase().includes(installedSearch.toLowerCase()) ||
-      g.installDir.toLowerCase().includes(installedSearch.toLowerCase())
-  );
+      (g.installDir || '').toLowerCase().includes(installedSearch.toLowerCase());
+
+    const matchesLib =
+      !selectedLibraryPath ||
+      g.libraryPath === selectedLibraryPath ||
+      g.libraryDisplayPath === selectedLibraryPath;
+
+    return matchesSearch && matchesLib;
+  });
+
+  const validGamesCount = installedGames.filter((g) => !isTechnicalGame(g)).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
@@ -477,24 +505,72 @@ export const SteamLibrary: React.FC = () => {
             <span>Добавить стороннюю игру</span>
           </button>
 
-          {libraries.length > 0 &&
-            libraries.map((lib, idx) => (
+          {/* Library Filters / File Manager Navigation */}
+          {libraries.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                key={idx}
                 type="button"
-                onClick={() =>
-                  navigate(`/admin/files?path=${encodeURIComponent(lib.displayPath + '/steamapps/common')}`)
-                }
-                className="px-3.5 py-2 rounded-xl bg-steam-card border border-steam-border/80 text-xs text-slate-300 hover:text-white hover:border-steam-accent flex items-center gap-2 transition-all cursor-pointer shadow-md"
-                title="Открыть директорию steamapps/common в файловом менеджере"
+                onClick={() => setSelectedLibraryPath(null)}
+                className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-md flex items-center gap-1.5 ${
+                  selectedLibraryPath === null
+                    ? 'bg-steam-blue text-white border-steam-blue shadow-cyan-500/20'
+                    : 'bg-steam-card text-slate-300 border-steam-border/80 hover:text-white hover:border-slate-500'
+                }`}
+                title="Показать игры со всех подключенных накопителей"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-steam-accent" />
-                <span className="font-mono">{lib.displayPath}</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-steam-accent/20 text-steam-accent">
-                  {lib.gamesCount} игр
+                <span>Все накопители</span>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                    selectedLibraryPath === null ? 'bg-white/20 text-white' : 'bg-steam-accent/20 text-steam-accent'
+                  }`}
+                >
+                  {validGamesCount}
                 </span>
               </button>
-            ))}
+
+              {libraries.map((lib, idx) => {
+                const isSelected = selectedLibraryPath === lib.path || selectedLibraryPath === lib.displayPath;
+                return (
+                  <div key={idx} className="inline-flex items-center rounded-xl overflow-hidden shadow-md">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLibraryPath(isSelected ? null : lib.path)}
+                      className={`px-3 py-2 border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-steam-blue text-white border-steam-blue'
+                          : 'bg-steam-card text-slate-300 border-steam-border/80 hover:text-white hover:border-steam-accent'
+                      }`}
+                      title={`Фильтровать игры: показать только из ${lib.displayPath}`}
+                    >
+                      <HardDrive className="w-3.5 h-3.5 text-steam-accent" />
+                      <span className="font-mono">{lib.displayPath}</span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-steam-accent/20 text-steam-accent'
+                        }`}
+                      >
+                        {lib.gamesCount} игр
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(`/files?path=${encodeURIComponent(lib.displayPath + '/steamapps/common')}`)
+                      }
+                      className={`px-2.5 py-2 border border-l-0 text-xs transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-steam-blue/90 text-white border-steam-blue hover:bg-steam-blue'
+                          : 'bg-steam-nav text-slate-400 border-steam-border/80 hover:text-white hover:bg-slate-700'
+                      }`}
+                      title="Открыть каталог steamapps/common в файловом менеджере"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -512,7 +588,7 @@ export const SteamLibrary: React.FC = () => {
           <Gamepad2 className="w-4 h-4 text-steam-accent" />
           <span>Установленные игры в Steam</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-steam-accent/15 text-steam-accent font-mono font-bold">
-            {installedGames.length}
+            {validGamesCount}
           </span>
         </button>
 
@@ -671,7 +747,7 @@ export const SteamLibrary: React.FC = () => {
                   <div className="p-3 bg-steam-nav/60 border-t border-steam-border/60 flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/admin/files?path=${encodeURIComponent(game.displayPath)}`)}
+                      onClick={() => navigate(`/files?path=${encodeURIComponent(game.displayPath)}`)}
                       className="flex-1 py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-steam-cardHover text-slate-200 border border-steam-border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       title="Открыть каталог игры в файловом менеджере"
                     >

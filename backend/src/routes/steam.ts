@@ -38,22 +38,69 @@ export function toInternalPath(p: string): string {
   return p;
 }
 
-function isJunkDirectory(name: string): boolean {
-  if (!name) return true;
-  const lower = name.toLowerCase().trim();
-  const junkPatterns = [
-    'steam controller configs',
-    'steamworks shared',
-    'steam linux runtime',
-    'common redistributables',
-    'proton',
-    'shadercache',
-    'directx',
-    'vcredist',
-    '.tools',
-    'depotcache',
-  ];
-  return junkPatterns.some((pattern) => lower.includes(pattern));
+// Set of official Steam / Valve utility & runtime AppIDs to exclude from game list
+const STEAM_TOOL_APPIDS = new Set<number>([
+  1070560, // Steam Linux Runtime
+  1391110, // Steam Linux Runtime 3.0 (sniper)
+  1628350, // Steam Linux Runtime 2.0 (soldier)
+  228980,  // Steamworks Common Redistributables
+  1493710, // Proton Experimental
+  2180070, // Proton 8.0
+  2805730, // Proton 9.0
+  2230260, // Proton Hotfix
+  894760,  // Proton 3.7
+  961940,  // Proton 4.2
+  1054050, // Proton 5.0
+  1580130, // Proton 6.3
+  1887720, // Proton 7.0
+  1826330, // Proton EasyAntiCheat Runtime
+  1826340, // Proton BattlEye Runtime
+  247080,  // SteamVR
+  250820,  // SteamVR
+]);
+
+function isTechnicalOrJunk(name?: string, installDir?: string, appId?: number | null): boolean {
+  if (appId && STEAM_TOOL_APPIDS.has(appId)) {
+    return true;
+  }
+
+  const check = (str?: string): boolean => {
+    if (!str) return false;
+    const lower = str.toLowerCase().trim();
+    const squashed = lower.replace(/[\s\-_.]/g, '');
+
+    const junkKeywords = [
+      'steamcontrollerconfigs',
+      'steamcontroller',
+      'steamworks',
+      'steamlinuxruntime',
+      'linuxruntime',
+      'commonredistributables',
+      'redistributables',
+      'proton',
+      'shadercache',
+      'directx',
+      'vcredist',
+      'vc_redist',
+      'ue4prereq',
+      'ueprereq',
+      'oalinst',
+      'dotnet',
+      'mono',
+      'depotcache',
+      'sourcemods',
+      'steamaudio',
+      'workshop',
+      '.tools',
+      'openvr',
+      'steamvr',
+      'steamlinux',
+    ];
+
+    return junkKeywords.some((kw) => squashed.includes(kw) || lower.includes(kw));
+  };
+
+  return check(name) || check(installDir);
 }
 
 // Well-known popular game titles mapped to official Steam AppIDs for instant cover art
@@ -273,7 +320,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
             const sizeBytes = data['SizeOnDisk'] ? parseInt(data['SizeOnDisk'], 10) : 0;
             const lastUpdated = data['LastUpdated'];
 
-            if (installDir && !isJunkDirectory(name || installDir)) {
+            if (installDir && !isTechnicalOrJunk(name, installDir, appId)) {
               matchedCommonDirs.add(installDir.toLowerCase());
               matchedCommonDirs.add(installDir.toLowerCase().replace(/[\s\-_]/g, ''));
 
@@ -319,7 +366,7 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
         for (const entry of entries) {
           if (entry.isDirectory()) {
             const folderName = entry.name;
-            if (isJunkDirectory(folderName)) continue;
+            if (isTechnicalOrJunk(folderName, folderName)) continue;
 
             const normalizedFolder = folderName.toLowerCase();
             const squashedFolder = normalizedFolder.replace(/[\s\-_]/g, '');
