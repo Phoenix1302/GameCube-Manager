@@ -52,6 +52,37 @@ async function getClient(): Promise<AxiosInstance> {
   return client;
 }
 
+/**
+ * Controls torrent state (stop/start/pause/resume).
+ * Seamlessly supports both qBittorrent 5.0+ (/stop, /start)
+ * and legacy qBittorrent 4.x (/pause, /resume).
+ */
+async function controlTorrent(
+  client: AxiosInstance,
+  action: 'stop' | 'start',
+  hashes: string
+) {
+  const legacyAction = action === 'stop' ? 'pause' : 'resume';
+  const params = new URLSearchParams();
+  params.append('hashes', hashes);
+
+  try {
+    // Try modern qBittorrent 5.0+ endpoint first (/stop or /start)
+    await client.post(`/api/v2/torrents/${action}`, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      // Fallback for legacy qBittorrent 4.x (/pause or /resume)
+      await client.post(`/api/v2/torrents/${legacyAction}`, params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+    } else {
+      throw err;
+    }
+  }
+}
+
 export async function torrentsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
 
@@ -119,7 +150,10 @@ export async function torrentsRoutes(fastify: FastifyInstance) {
       const params = new URLSearchParams();
       params.append('urls', urls.trim());
       if (savePath) params.append('savepath', savePath.trim());
-      if (paused !== undefined) params.append('paused', paused ? 'true' : 'false');
+      if (paused !== undefined) {
+        params.append('paused', paused ? 'true' : 'false');
+        params.append('stopped', paused ? 'true' : 'false');
+      }
 
       const res = await client.post('/api/v2/torrents/add', params.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -173,8 +207,8 @@ export async function torrentsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Pause torrent(s)
-  fastify.post('/pause', async (request, reply) => {
+  // Pause / Stop torrent(s) (supports both qB 5.0+ and 4.x)
+  const stopHandler = async (request: any, reply: any) => {
     const { hashes } = request.body as { hashes?: string[] | string };
     if (!hashes) {
       return reply.status(400).send({ error: 'Torrent hash or hashes are required' });
@@ -184,19 +218,17 @@ export async function torrentsRoutes(fastify: FastifyInstance) {
 
     try {
       const client = await getClient();
-      const params = new URLSearchParams();
-      params.append('hashes', hashList);
-      await client.post('/api/v2/torrents/pause', params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-      return { message: 'Torrents paused' };
+      await controlTorrent(client, 'stop', hashList);
+      return { message: 'Torrents paused/stopped' };
     } catch (err: any) {
-      return reply.status(500).send({ error: `Failed to pause torrent: ${err.message}` });
+      return reply.status(500).send({ error: `Failed to pause/stop torrent: ${err.message}` });
     }
-  });
+  };
+  fastify.post('/pause', stopHandler);
+  fastify.post('/stop', stopHandler);
 
-  // Resume torrent(s)
-  fastify.post('/resume', async (request, reply) => {
+  // Resume / Start torrent(s) (supports both qB 5.0+ and 4.x)
+  const startHandler = async (request: any, reply: any) => {
     const { hashes } = request.body as { hashes?: string[] | string };
     if (!hashes) {
       return reply.status(400).send({ error: 'Torrent hash or hashes are required' });
@@ -206,16 +238,14 @@ export async function torrentsRoutes(fastify: FastifyInstance) {
 
     try {
       const client = await getClient();
-      const params = new URLSearchParams();
-      params.append('hashes', hashList);
-      await client.post('/api/v2/torrents/resume', params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-      return { message: 'Torrents resumed' };
+      await controlTorrent(client, 'start', hashList);
+      return { message: 'Torrents resumed/started' };
     } catch (err: any) {
-      return reply.status(500).send({ error: `Failed to resume torrent: ${err.message}` });
+      return reply.status(500).send({ error: `Failed to resume/start torrent: ${err.message}` });
     }
-  });
+  };
+  fastify.post('/resume', startHandler);
+  fastify.post('/start', startHandler);
 
   // Delete torrent(s)
   fastify.post('/delete', async (request, reply) => {

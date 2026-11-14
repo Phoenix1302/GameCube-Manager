@@ -45,6 +45,7 @@ export const Torrents: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [togglingHash, setTogglingHash] = useState<string | null>(null);
 
   // RuTracker Search Modal states
   const [showRutrackerModal, setShowRutrackerModal] = useState(false);
@@ -194,16 +195,67 @@ export const Torrents: React.FC = () => {
     }
   };
 
+  const isTorrentPaused = (state: string) => {
+    const s = (state || '').toLowerCase();
+    return s.includes('stop') || s.includes('pause');
+  };
+
+  const getTorrentStateBadge = (state: string) => {
+    const s = (state || '').toLowerCase();
+    if (s.includes('error') || s.includes('missing')) {
+      return { label: 'Ошибка', className: 'text-red-400 bg-red-500/15 border-red-500/30' };
+    }
+    if (s.includes('paused') || s.includes('stop')) {
+      if (s.includes('up')) {
+        return { label: 'Завершён (пауза)', className: 'text-slate-300 bg-slate-600/20 border-slate-500/30' };
+      }
+      return { label: 'Приостановлен', className: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+    }
+    if (s.includes('download') || s.includes('metadl')) {
+      return { label: 'Загрузка', className: 'text-steam-cyan bg-cyan-500/15 border-cyan-500/30' };
+    }
+    if (s.includes('upload') || s.includes('seed')) {
+      return { label: 'Раздача', className: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30' };
+    }
+    if (s.includes('stalled')) {
+      if (s.includes('dl')) {
+        return { label: 'Поиск пиров', className: 'text-sky-300 bg-sky-500/15 border-sky-500/30' };
+      }
+      return { label: 'Раздача (нет пиров)', className: 'text-slate-400 bg-slate-600/15 border-slate-500/20' };
+    }
+    if (s.includes('check')) {
+      return { label: 'Проверка данных', className: 'text-purple-300 bg-purple-500/15 border-purple-500/30' };
+    }
+    if (s.includes('queued')) {
+      return { label: 'В очереди', className: 'text-slate-400 bg-slate-600/15 border-slate-500/20' };
+    }
+    if (s.includes('allocat')) {
+      return { label: 'Выделение места', className: 'text-yellow-300 bg-yellow-500/15 border-yellow-500/30' };
+    }
+    if (s.includes('mov')) {
+      return { label: 'Перемещение', className: 'text-yellow-300 bg-yellow-500/15 border-yellow-500/30' };
+    }
+    return { label: state || 'Неизвестно', className: 'text-slate-400 bg-slate-600/15 border-slate-500/20' };
+  };
+
   const togglePause = async (hash: string, isPaused: boolean) => {
+    setTogglingHash(hash);
     try {
       if (isPaused) {
         await api.post('/torrents/resume', { hashes: hash });
       } else {
         await api.post('/torrents/pause', { hashes: hash });
       }
-      loadTorrents();
-    } catch (err) {
+      await loadTorrents();
+    } catch (err: any) {
       console.error('Failed to toggle torrent pause state', err);
+      await alert({
+        title: 'Ошибка',
+        message: `Не удалось ${isPaused ? 'возобновить' : 'приостановить'} загрузку торрента: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
+    } finally {
+      setTogglingHash(null);
     }
   };
 
@@ -217,8 +269,13 @@ export const Torrents: React.FC = () => {
       setDeleteTarget(null);
       setDeleteFiles(false);
       loadTorrents();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete torrent', err);
+      await alert({
+        title: 'Ошибка удаления',
+        message: `Не удалось удалить торрент: ${err.response?.data?.error || err.message}`,
+        variant: 'danger',
+      });
     }
   };
 
@@ -372,7 +429,9 @@ export const Torrents: React.FC = () => {
           {/* Mobile Cards View (sm:hidden) */}
           <div className="block sm:hidden space-y-3">
             {torrents.map((t) => {
-              const isPaused = t.state.includes('paused') || t.state.includes('stopped');
+              const isPaused = isTorrentPaused(t.state);
+              const stateBadge = getTorrentStateBadge(t.state);
+              const isToggling = togglingHash === t.hash;
               return (
                 <div
                   key={t.hash}
@@ -383,21 +442,33 @@ export const Torrents: React.FC = () => {
                       <div className="font-bold text-white text-sm truncate" title={t.name}>
                         {t.name}
                       </div>
-                      <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                        {t.state} • {formatBytes(t.size)}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${stateBadge.className}`}>
+                          {stateBadge.label}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          • {formatBytes(t.size)}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         onClick={() => togglePause(t.hash, isPaused)}
-                        className="p-2 rounded-xl bg-steam-nav text-slate-200 hover:text-white"
-                        title={isPaused ? 'Возобновить' : 'Приостановить'}
+                        disabled={isToggling}
+                        className="p-2 rounded-xl bg-steam-nav text-slate-200 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        title={isPaused ? 'Возобновить скачивание' : 'Приостановить скачивание'}
                       >
-                        {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
+                        {isToggling ? (
+                          <Loader2 className="w-4 h-4 text-steam-cyan animate-spin" />
+                        ) : isPaused ? (
+                          <Play className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Pause className="w-4 h-4 text-amber-400" />
+                        )}
                       </button>
                       <button
                         onClick={() => setDeleteTarget(t.hash)}
-                        className="p-2 rounded-xl bg-steam-nav text-slate-300 hover:text-red-400"
+                        className="p-2 rounded-xl bg-steam-nav text-slate-300 hover:text-red-400 cursor-pointer"
                         title="Удалить"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -452,15 +523,20 @@ export const Torrents: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-steam-border/50">
                   {torrents.map((t) => {
-                    const isPaused = t.state.includes('paused') || t.state.includes('stopped');
+                    const isPaused = isTorrentPaused(t.state);
+                    const stateBadge = getTorrentStateBadge(t.state);
+                    const isToggling = togglingHash === t.hash;
                     return (
                       <tr key={t.hash} className="hover:bg-steam-cardHover/50 transition-colors">
                         <td className="px-5 py-4 max-w-xs sm:max-w-md">
                           <div className="font-semibold text-slate-100 truncate" title={t.name}>
                             {t.name}
                           </div>
-                          <div className="text-xs text-slate-400 mt-0.5 truncate font-mono">
-                            {t.state}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${stateBadge.className}`}>
+                              {stateBadge.label}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">({t.state})</span>
                           </div>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap font-mono text-xs">
@@ -493,10 +569,17 @@ export const Torrents: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => togglePause(t.hash, isPaused)}
-                              className="p-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-slate-300 hover:text-white transition-colors cursor-pointer"
-                              title={isPaused ? 'Возобновить' : 'Приостановить'}
+                              disabled={isToggling}
+                              className="p-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-slate-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={isPaused ? 'Возобновить скачивание' : 'Приостановить скачивание'}
                             >
-                              {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
+                              {isToggling ? (
+                                <Loader2 className="w-4 h-4 text-steam-cyan animate-spin" />
+                              ) : isPaused ? (
+                                <Play className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <Pause className="w-4 h-4 text-amber-400" />
+                              )}
                             </button>
                             <button
                               onClick={() => setDeleteTarget(t.hash)}
