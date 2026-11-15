@@ -140,43 +140,53 @@ export function isDesktopUserAgent(ua?: string): boolean {
 }
 
 /**
- * Saves real desktop user-agent to database for reuse across mobile sessions.
+ * Saves real desktop user-agent to database for reuse across mobile sessions,
+ * ONLY as an initial fallback if no User-Agent is explicitly configured yet.
  */
 export function saveDesktopUserAgentIfApplicable(incomingUa?: string, userId?: number): void {
-  if (isDesktopUserAgent(incomingUa)) {
-    const cleanUa = incomingUa!.trim();
-    if (userId) {
+  if (!isDesktopUserAgent(incomingUa)) return;
+  const cleanUa = incomingUa!.trim();
+  if (userId) {
+    const existingUserUa = (settingsQueries.getUserSetting(userId, 'rutracker_user_agent') || '').trim();
+    if (!existingUserUa) {
       settingsQueries.setUserSetting(userId, 'rutracker_user_agent', cleanUa);
     }
+  }
+  const existingGlobalUa = (settingsQueries.get('rutracker_user_agent', '') || '').trim();
+  if (!existingGlobalUa) {
     settingsQueries.set('rutracker_user_agent', cleanUa);
   }
 }
 
 /**
  * Common browser headers to avoid anti-bot blocks.
- * Enforces desktop browser User-Agent so Cloudflare cf_clearance validation passes even when browsing from mobile devices.
+ * Prioritizes user's explicitly configured User-Agent to match cf_clearance cookies.
  */
 export function getBrowserHeaders(extraCookie?: string, customUa?: string, userId?: number) {
   const baseUrl = getRutrackerBaseUrl();
   const cookie = extraCookie || getRutrackerCookieHeader(userId);
 
-  // If custom incoming UA is desktop, auto-save it for subsequent mobile sessions
-  if (isDesktopUserAgent(customUa)) {
-    saveDesktopUserAgentIfApplicable(customUa, userId);
-  }
-
   // Priority for User-Agent:
-  // 1. Valid desktop incoming UA
-  // 2. Saved user desktop UA
-  // 3. Saved global desktop UA
+  // 1. Explicitly saved user User-Agent from DB (highest priority - user configured it to match their cf_clearance!)
+  // 2. Explicitly saved global User-Agent from DB
+  // 3. Current incoming desktop User-Agent (if valid desktop browser and DB was empty)
   // 4. Fallback DEFAULT_DESKTOP_UA
   let ua = '';
-  if (isDesktopUserAgent(customUa)) {
+  if (userId) {
+    const userUa = (settingsQueries.getUserSetting(userId, 'rutracker_user_agent') || '').trim();
+    if (userUa) {
+      ua = userUa;
+    }
+  }
+  if (!ua) {
+    const globalUa = (settingsQueries.get('rutracker_user_agent', '') || '').trim();
+    if (globalUa) {
+      ua = globalUa;
+    }
+  }
+  if (!ua && isDesktopUserAgent(customUa)) {
     ua = customUa!.trim();
-  } else if (userId && isDesktopUserAgent(settingsQueries.getUserSetting(userId, 'rutracker_user_agent'))) {
-    ua = settingsQueries.getUserSetting(userId, 'rutracker_user_agent').trim();
-  } else if (isDesktopUserAgent(settingsQueries.get('rutracker_user_agent', ''))) {
-    ua = settingsQueries.get('rutracker_user_agent', '').trim();
+    saveDesktopUserAgentIfApplicable(customUa, userId);
   }
 
   if (!ua) {

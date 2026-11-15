@@ -19,6 +19,7 @@ import {
   Clock,
   Sliders,
   Magnet,
+  Globe,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -53,6 +54,7 @@ export const Settings: React.FC = () => {
     cache_auto_clean: 'true',
     rutracker_url: 'https://rutracker.org',
     rutracker_cookie: '',
+    rutracker_user_agent: '',
     rutracker_login: '',
     rutracker_password: '',
     rutracker_download_mode: 'magnet',
@@ -483,6 +485,47 @@ export const Settings: React.FC = () => {
               <p className="text-[11px] text-slate-400 mt-1">
                 Для обхода Cloudflare: вставьте <code>bb_session=...; cf_clearance=...</code> или скопируйте всю строку <code>Cookie</code> из вкладки <b>Сеть (Network)</b> DevTools браузера.
                 {!isAdmin && <span className="text-steam-cyan block mt-0.5">Ваши cookie хранятся строго в вашем личном профиле.</span>}
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-steam-accent" />
+                  <span>User-Agent браузера (для Cloudflare)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleChange('rutracker_user_agent', navigator.userAgent)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-steam-accent hover:text-white transition-colors cursor-pointer bg-steam-accent/10 hover:bg-steam-accent/20 px-2.5 py-1 rounded-lg border border-steam-accent/30"
+                  title="Определить и вставить User-Agent текущего браузера"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Вставить текущий браузер</span>
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={settings.rutracker_user_agent || ''}
+                  onChange={(e) => handleChange('rutracker_user_agent', e.target.value)}
+                  placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/..."
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-xs rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue pr-20"
+                />
+                {settings.rutracker_user_agent && (
+                  <button
+                    type="button"
+                    onClick={() => handleChange('rutracker_user_agent', '')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-200"
+                    title="Очистить поле"
+                  >
+                    Сбросить
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Кука <code className="text-emerald-400">cf_clearance</code> от Cloudflare жестко привязана к точному User-Agent браузера, в котором она была получена. Если вы копируете куки из этого браузера, нажмите кнопку <b className="text-steam-accent">«Вставить текущий браузер»</b>.
+                {!isAdmin && <span className="text-steam-cyan block mt-0.5">Сохраняется в вашем персональном профиле и используется для всех ваших запросов к RuTracker.</span>}
               </p>
             </div>
 

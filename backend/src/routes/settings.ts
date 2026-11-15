@@ -17,7 +17,12 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     const user = getAuthUser(request);
     if (user.role === 'admin') {
       const settings = settingsQueries.getAll();
-      return { settings };
+      return {
+        settings: {
+          ...settings,
+          rutracker_user_agent: settings.rutracker_user_agent || '',
+        },
+      };
     }
 
     // Regular users: return public & per-user settings (with fallback to global defaults)
@@ -69,8 +74,8 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     const body = request.body as Record<string, string>;
     const incomingUa = request.headers['user-agent'];
 
-    // Auto-capture desktop user-agent if saving cookies and user-agent was not explicitly typed
-    if (isDesktopUserAgent(incomingUa) && !body.rutracker_user_agent) {
+    // Auto-capture desktop user-agent only if not explicitly provided in payload and not set in DB
+    if (isDesktopUserAgent(incomingUa) && body.rutracker_user_agent === undefined) {
       if (user.role === 'admin' && !settingsQueries.get('rutracker_user_agent', '')) {
         settingsQueries.set('rutracker_user_agent', incomingUa!.trim());
       }
@@ -80,14 +85,21 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     }
 
     if (user.role === 'admin') {
+      const allowedUserSyncKeys = ['rutracker_cookie', 'rutracker_download_mode', 'rutracker_url', 'rutracker_user_agent'];
       for (const [key, value] of Object.entries(body)) {
         if (typeof value === 'string') {
           settingsQueries.set(key, value.trim());
+          if (allowedUserSyncKeys.includes(key)) {
+            settingsQueries.setUserSetting(user.id, key, value.trim());
+          }
         }
       }
       return {
         message: 'Settings saved successfully',
-        settings: settingsQueries.getAll(),
+        settings: {
+          ...settingsQueries.getAll(),
+          rutracker_user_agent: settingsQueries.get('rutracker_user_agent', ''),
+        },
       };
     }
 
