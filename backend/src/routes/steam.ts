@@ -1672,10 +1672,11 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
     if (basename === 'gamecube-restart-steam' || (configured && script === toInternalPath(configured))) {
       try {
         console.log(`[Steam] Executing primary seamless helper: ${hostPath} restart`);
-        execSync(
-          `chroot /host_root ${hostPath} restart 2>/dev/null || chroot /host_root runuser -u ${activeUser} -- ${hostPath} restart 2>/dev/null || true`,
-          { timeout: 8000, stdio: 'ignore' }
-        );
+        const out = execSync(
+          `chroot /host_root ${hostPath} restart 2>&1 || chroot /host_root runuser -u ${activeUser} -- ${hostPath} restart 2>&1 || true`,
+          { timeout: 8000 }
+        ).toString();
+        console.log(`[Steam] Helper output:\n${out.trim()}`);
         executed.push(basename);
         return {
           success: true,
