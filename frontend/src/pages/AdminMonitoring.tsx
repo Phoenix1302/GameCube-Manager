@@ -580,15 +580,15 @@ export const AdminMonitoring: React.FC = () => {
                 <div
                   key={idx}
                   onClick={() => setSelectedIface(net.iface)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 ${
                     isSelected
                       ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-500/10'
                       : 'bg-steam-nav/90 border-steam-border/60 hover:border-steam-blue/60 hover:bg-steam-nav'
                   }`}
                   title="Нажмите, чтобы показать график этого интерфейса"
                 >
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex items-center justify-between sm:block">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <span className="font-bold text-xs sm:text-sm text-slate-100 font-mono">{net.iface}</span>
                       {net.iface === 'lo' && (
                         <span className="text-[10px] text-slate-400 font-normal">(Локальный / Web)</span>
@@ -597,26 +597,26 @@ export const AdminMonitoring: React.FC = () => {
                         <span className="text-[10px] text-slate-400 font-normal">(Сетевой адаптер)</span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className="text-[10px] text-slate-400 sm:mt-0.5">
                       Статус: <span className="text-emerald-400 font-medium">{net.operstate || 'UP'}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-5 font-mono text-xs">
-                    <div className="text-right">
-                      <div className="text-steam-cyan flex items-center justify-end gap-1 font-bold">
-                        <ArrowDown className="w-3 h-3" />
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-5 font-mono text-xs pt-1.5 sm:pt-0 border-t sm:border-t-0 border-steam-border/40">
+                    <div className="text-left sm:text-right">
+                      <div className="text-steam-cyan flex items-center sm:justify-end gap-1 font-bold text-xs sm:text-sm">
+                        <ArrowDown className="w-3 h-3 flex-shrink-0" />
                         {formatSpeed(net.rx_sec)}
                       </div>
-                      <div className="text-slate-500 text-[10px]">Всего: {formatBytes(net.rx_bytes)}</div>
+                      <div className="text-slate-500 text-[9px] sm:text-[10px]">Всего: {formatBytes(net.rx_bytes)}</div>
                     </div>
 
                     <div className="text-right">
-                      <div className="text-indigo-300 flex items-center justify-end gap-1 font-bold">
-                        <ArrowUp className="w-3 h-3" />
+                      <div className="text-indigo-300 flex items-center justify-end gap-1 font-bold text-xs sm:text-sm">
+                        <ArrowUp className="w-3 h-3 flex-shrink-0" />
                         {formatSpeed(net.tx_sec)}
                       </div>
-                      <div className="text-slate-500 text-[10px]">Всего: {formatBytes(net.tx_bytes)}</div>
+                      <div className="text-slate-500 text-[9px] sm:text-[10px]">Всего: {formatBytes(net.tx_bytes)}</div>
                     </div>
                   </div>
                 </div>
@@ -714,15 +714,18 @@ export const AdminMonitoring: React.FC = () => {
                   </div>
 
                   {/* Storage Numbers */}
-                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                    <div>
-                      Занято: <strong className="text-slate-200">{formatBytes(disk.used)}</strong>
+                  <div className="grid grid-cols-3 gap-1 text-[10px] sm:text-[11px] font-mono text-slate-400">
+                    <div className="truncate">
+                      <span className="text-slate-500">Занято: </span>
+                      <strong className="text-slate-200">{formatBytes(disk.used)}</strong>
                     </div>
-                    <div>
-                      Свободно: <strong className="text-emerald-400">{formatBytes(freeBytes)}</strong>
+                    <div className="text-center truncate">
+                      <span className="text-slate-500">Свободно: </span>
+                      <strong className="text-emerald-400">{formatBytes(freeBytes)}</strong>
                     </div>
-                    <div>
-                      Всего: <strong className="text-slate-300">{formatBytes(disk.size)}</strong>
+                    <div className="text-right truncate">
+                      <span className="text-slate-500">Всего: </span>
+                      <strong className="text-slate-300">{formatBytes(disk.size)}</strong>
                     </div>
                   </div>
                 </div>
