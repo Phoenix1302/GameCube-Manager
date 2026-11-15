@@ -72,6 +72,7 @@ echo -e "\n${BLUE}==>${NC} ${BOLD}4. Configuring Seamless SteamOS / Gamescope Se
 # Detect Gamescope session desktop file
 GAMESCOPE_SESS=""
 for sess in \
+    "gamescope-session-steam.desktop" \
     "gamescope-wayland.desktop" \
     "gamescope-session.desktop" \
     "steam.desktop" \
@@ -83,7 +84,7 @@ for sess in \
         break
     fi
 done
-[ -z "$GAMESCOPE_SESS" ] && GAMESCOPE_SESS="gamescope-wayland.desktop"
+[ -z "$GAMESCOPE_SESS" ] && GAMESCOPE_SESS="gamescope-session-steam.desktop"
 
 # Install helper script to /usr/local/bin/gamecube-restart-steam
 if [ -f "${SCRIPT_DIR}/deploy/scripts/gamecube-restart-steam.sh" ]; then
@@ -91,10 +92,31 @@ if [ -f "${SCRIPT_DIR}/deploy/scripts/gamecube-restart-steam.sh" ]; then
     echo -e "    ${GREEN}✔${NC} Installed helper script: ${CYAN}/usr/local/bin/gamecube-restart-steam${NC}"
 fi
 
-# Configure SDDM autologin with Relogin=true to prevent dropping into greeter on restart
-if [ -d "/etc/sddm.conf.d" ] || command -v sddm >/dev/null 2>&1; then
+# Backup legacy /usr/local/bin/steamos-session-select and symlink to our universal helper
+if [ -f "/usr/local/bin/steamos-session-select" ] && [ ! -L "/usr/local/bin/steamos-session-select" ]; then
+    sudo mv /usr/local/bin/steamos-session-select "/usr/local/bin/steamos-session-select.bak.$(date +%s)"
+fi
+sudo ln -sf /usr/local/bin/gamecube-restart-steam /usr/local/bin/steamos-session-select
+echo -e "    ${GREEN}✔${NC} Linked SteamOS session switcher: ${CYAN}/usr/local/bin/steamos-session-select${NC} -> /usr/local/bin/gamecube-restart-steam"
+
+# Clean up legacy / conflicting drop-ins that break desktop switching
+sudo rm -f /etc/sddm.conf.d/zz-gamecube-session.conf /etc/plasmalogin.conf.d/zz-gamecube-session.conf /etc/sudoers.d/99-gamecube-restart 2>/dev/null || true
+
+# Configure Plasma Login Manager (plasmalogin) autologin
+if [ -d "/etc/plasmalogin.conf.d" ] || command -v plasmalogin >/dev/null 2>&1 || systemctl is-active --quiet plasmalogin.service 2>/dev/null; then
+    sudo mkdir -p /etc/plasmalogin.conf.d
+    cat << EOF | sudo tee /etc/plasmalogin.conf.d/autologin.conf >/dev/null
+[Autologin]
+User=${CURRENT_USER}
+Session=${GAMESCOPE_SESS}
+EOF
+    echo -e "    ${GREEN}✔${NC} Configured Plasma Login Manager autologin (${GAMESCOPE_SESS})"
+fi
+
+# Configure SDDM autologin with Relogin=true
+if [ -d "/etc/sddm.conf.d" ] || command -v sddm >/dev/null 2>&1 || systemctl is-active --quiet sddm.service 2>/dev/null; then
     sudo mkdir -p /etc/sddm.conf.d
-    cat << EOF | sudo tee /etc/sddm.conf.d/zz-gamecube-session.conf >/dev/null
+    cat << EOF | sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null
 [Autologin]
 User=${CURRENT_USER}
 Session=${GAMESCOPE_SESS}
@@ -115,10 +137,13 @@ EOF
     echo -e "    ${GREEN}✔${NC} Configured SDDM Last Session to: ${CYAN}${GAMESCOPE_SESS}${NC}"
 fi
 
-# Passwordless sudo for helper script if invoked via sudo
+# Passwordless sudo for session switcher
 if [ -d "/etc/sudoers.d" ]; then
-    echo "${CURRENT_USER} ALL=(ALL) NOPASSWD: /usr/local/bin/gamecube-restart-steam" | sudo tee /etc/sudoers.d/99-gamecube-restart >/dev/null
-    sudo chmod 440 /etc/sudoers.d/99-gamecube-restart
+    cat << 'EOF' | sudo tee /etc/sudoers.d/99-gamecube-session >/dev/null
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/gamecube-restart-steam, /usr/local/bin/steamos-session-select
+EOF
+    sudo chmod 440 /etc/sudoers.d/99-gamecube-session
+    echo -e "    ${GREEN}✔${NC} Configured passwordless sudo for session switcher in /etc/sudoers.d/99-gamecube-session"
 fi
 
 # 5. Storage & Directory Setup

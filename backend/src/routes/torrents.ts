@@ -47,6 +47,8 @@ async function getClient(): Promise<AxiosInstance> {
   if (setCookie && setCookie.length > 0) {
     qbCookie = setCookie[0].split(';')[0];
     client.defaults.headers['Cookie'] = qbCookie;
+    (client.defaults.headers as any).common = (client.defaults.headers as any).common || {};
+    (client.defaults.headers as any).common['Cookie'] = qbCookie;
   }
 
   return client;
@@ -66,17 +68,20 @@ async function controlTorrent(
   const params = new URLSearchParams();
   params.append('hashes', hashes);
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  if (qbCookie) {
+    headers['Cookie'] = qbCookie;
+  }
+
   try {
     // Try modern qBittorrent 5.0+ endpoint first (/stop or /start)
-    await client.post(`/api/v2/torrents/${action}`, params.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
+    await client.post(`/api/v2/torrents/${action}`, params.toString(), { headers });
   } catch (err: any) {
     if (err.response?.status === 404) {
       // Fallback for legacy qBittorrent 4.x (/pause or /resume)
-      await client.post(`/api/v2/torrents/${legacyAction}`, params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
+      await client.post(`/api/v2/torrents/${legacyAction}`, params.toString(), { headers });
     } else {
       throw err;
     }
@@ -261,9 +266,13 @@ export async function torrentsRoutes(fastify: FastifyInstance) {
       const params = new URLSearchParams();
       params.append('hashes', hashList);
       params.append('deleteFiles', deleteFiles ? 'true' : 'false');
-      await client.post('/api/v2/torrents/delete', params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      if (qbCookie) {
+        headers['Cookie'] = qbCookie;
+      }
+      await client.post('/api/v2/torrents/delete', params.toString(), { headers });
       return { message: 'Torrents deleted' };
     } catch (err: any) {
       return reply.status(500).send({ error: `Failed to delete torrent: ${err.message}` });
