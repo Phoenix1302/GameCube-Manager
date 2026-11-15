@@ -364,32 +364,62 @@ export const AdminFiles: React.FC = () => {
       case 'Игры':
         return {
           icon: Gamepad2,
-          color: 'text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20',
-        };
-      case 'Steam common':
-        return {
-          icon: Gamepad,
-          color: 'text-steam-accent border-steam-accent/30 bg-steam-accent/10 hover:bg-steam-accent/20',
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-amber-400 border border-steam-border/80',
+          active:
+            'text-amber-300 bg-amber-500/20 border border-amber-500/60 shadow-md shadow-amber-500/10 font-bold',
+          iconInactive: 'text-amber-400/80',
+          iconActive: 'text-amber-400',
         };
       case 'Загрузки':
         return {
           icon: DownloadCloud,
-          color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20',
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-emerald-400 border border-steam-border/80',
+          active:
+            'text-emerald-300 bg-emerald-500/20 border border-emerald-500/60 shadow-md shadow-emerald-500/10 font-bold',
+          iconInactive: 'text-emerald-400/80',
+          iconActive: 'text-emerald-400',
+        };
+      case 'Steam common':
+        return {
+          icon: Gamepad,
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-steam-accent border border-steam-border/80',
+          active:
+            'text-steam-accent bg-steam-accent/20 border border-steam-accent/60 shadow-md shadow-steam-accent/10 font-bold',
+          iconInactive: 'text-steam-accent/80',
+          iconActive: 'text-steam-accent',
         };
       case 'Steam Userdata':
         return {
           icon: HardDrive,
-          color: 'text-indigo-300 border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20',
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-indigo-300 border border-steam-border/80',
+          active:
+            'text-indigo-300 bg-indigo-500/20 border border-indigo-500/60 shadow-md shadow-indigo-500/10 font-bold',
+          iconInactive: 'text-indigo-300/80',
+          iconActive: 'text-indigo-300',
         };
       case 'Корень':
         return {
           icon: Folder,
-          color: 'text-slate-300 border-steam-border bg-steam-card hover:bg-steam-cardHover',
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-white border border-steam-border/80',
+          active:
+            'text-white bg-slate-700/50 border border-slate-400/60 shadow-md font-bold',
+          iconInactive: 'text-slate-400',
+          iconActive: 'text-white',
         };
       default:
         return {
           icon: FolderTree,
-          color: 'text-slate-300 border-steam-border bg-steam-card hover:bg-steam-cardHover',
+          inactive:
+            'text-slate-300 bg-steam-card/80 hover:bg-steam-cardHover hover:text-white border border-steam-border/80',
+          active:
+            'text-white bg-slate-700/50 border border-slate-400/60 shadow-md font-bold',
+          iconInactive: 'text-slate-400',
+          iconActive: 'text-white',
         };
     }
   };
@@ -470,17 +500,27 @@ export const AdminFiles: React.FC = () => {
           {roots.map((bm) => {
             const meta = getRootMeta(bm.name);
             const Icon = meta.icon;
-            const isActive = currentPath === bm.path;
+            const isExact = currentPath === bm.path;
+            const isInside =
+              bm.path === '/'
+                ? !roots.some(
+                    (r) =>
+                      r.path !== '/' &&
+                      (currentPath === r.path ||
+                        currentPath.startsWith(r.path.endsWith('/') ? r.path : r.path + '/'))
+                  )
+                : currentPath.startsWith(bm.path.endsWith('/') ? bm.path : bm.path + '/');
+            const isActive = isExact || isInside;
             return (
               <button
                 key={bm.path + bm.name}
                 type="button"
                 onClick={() => loadFiles(bm.path)}
-                className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition-all cursor-pointer whitespace-nowrap hover:scale-105 active:scale-95 ${
-                  meta.color
-                } ${isActive ? 'ring-2 ring-steam-accent/60 font-bold shadow-sm' : ''}`}
+                className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap focus:outline-none ${
+                  isActive ? meta.active : meta.inactive
+                }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? meta.iconActive : meta.iconInactive}`} />
                 <span>{bm.name}</span>
               </button>
             );
