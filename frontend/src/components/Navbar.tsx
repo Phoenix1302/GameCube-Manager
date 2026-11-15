@@ -36,10 +36,11 @@ export const Navbar: React.FC = () => {
     navigate('/login');
   };
 
-  // Navigation for regular users (Gaming suite only - NO file manager)
+  // Navigation for regular users (Gaming suite + Files)
   const userNavItems = [
     { name: 'Игры', path: '/', icon: Gamepad },
     { name: 'Торренты', path: '/torrents', icon: DownloadCloud },
+    { name: 'Файлы', path: '/files', icon: FolderTree },
     { name: 'Wishlist', path: '/wishlist', icon: Heart },
     { name: 'Steam Library', path: '/steam', icon: FolderSync },
     { name: 'Настройки', path: '/settings', icon: Settings },

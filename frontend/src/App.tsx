@@ -105,15 +105,9 @@ export const App: React.FC = () => {
                   </AdminRoute>
                 }
               />
-              <Route
-                path="/admin/files"
-                element={
-                  <AdminRoute>
-                    <AdminFiles />
-                  </AdminRoute>
-                }
-              />
-              <Route path="/files" element={<Navigate to="/admin/files" replace />} />
+              {/* File Manager Route (accessible by both regular users and admin) */}
+              <Route path="/files" element={<AdminFiles />} />
+              <Route path="/admin/files" element={<Navigate to="/files" replace />} />
               <Route
                 path="/admin/terminal"
                 element={
