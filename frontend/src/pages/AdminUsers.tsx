@@ -195,7 +195,7 @@ export const AdminUsers: React.FC = () => {
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-sm font-semibold shadow-lg shadow-blue-500/20 transition-all self-start sm:self-auto"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-sm font-semibold shadow-lg shadow-blue-500/20 transition-all"
         >
           <UserPlus className="w-4 h-4" />
           <span>Создать пользователя</span>

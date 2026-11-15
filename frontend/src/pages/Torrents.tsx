@@ -316,7 +316,7 @@ export const Torrents: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={() => {
               setShowRutrackerModal(true);
@@ -324,7 +324,7 @@ export const Torrents: React.FC = () => {
                 performRuSearch();
               }
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-emerald-600/20 transition-all cursor-pointer whitespace-nowrap"
           >
             <Search className="w-4 h-4" />
             <span>Поиск на RuTracker</span>
@@ -332,7 +332,7 @@ export const Torrents: React.FC = () => {
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-sm font-semibold shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-xs sm:text-sm font-semibold shadow-lg shadow-blue-500/20 transition-all cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
             <span>Вручную</span>
@@ -340,7 +340,7 @@ export const Torrents: React.FC = () => {
 
           <button
             onClick={loadTorrents}
-            className="p-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover text-slate-300 hover:text-white border border-steam-border transition-colors cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover text-slate-300 hover:text-white border border-steam-border transition-colors cursor-pointer flex-shrink-0"
             title="Обновить список"
           >
             <RefreshCw className="w-4 h-4" />

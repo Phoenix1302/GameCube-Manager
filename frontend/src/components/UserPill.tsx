@@ -40,31 +40,33 @@ export const UserPill: React.FC = () => {
       {/* User Pill Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-steam-card/90 hover:bg-steam-cardHover border border-steam-border/80 hover:border-steam-blue/60 transition-all duration-200 shadow-md group focus:outline-none focus:ring-2 focus:ring-steam-blue/40"
+        className="flex items-center gap-2 sm:gap-2.5 p-1 sm:px-3 sm:py-1.5 rounded-full bg-steam-card/90 hover:bg-steam-cardHover border border-steam-border/80 hover:border-steam-blue/60 transition-all duration-200 shadow-md group focus:outline-none focus:ring-2 focus:ring-steam-blue/40 flex-shrink-0"
+        title={user.username}
+        aria-label="Профиль пользователя"
       >
         {/* Circular Avatar */}
         <div
-          className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-inner flex-shrink-0"
+          className="w-7 h-7 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-inner flex-shrink-0"
           style={{ background: avatar.gradient || avatar.color }}
         >
           {avatar.initial}
         </div>
 
         {/* Username */}
-        <span className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors max-w-[75px] sm:max-w-[120px] truncate">
+        <span className="hidden sm:inline-block text-sm font-medium text-slate-200 group-hover:text-white transition-colors max-w-[120px] truncate">
           {user.username}
         </span>
 
         {/* Admin Badge */}
         {isAdmin && (
-          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase">
+          <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase">
             <ShieldCheck className="w-3 h-3" />
             ADMIN
           </span>
         )}
 
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform duration-200 ${
+          className={`hidden sm:inline-block w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform duration-200 ${
             isOpen ? 'rotate-180 text-steam-blue' : ''
           }`}
         />
@@ -72,7 +74,7 @@ export const UserPill: React.FC = () => {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-60 rounded-xl bg-steam-nav/95 backdrop-blur-xl border border-steam-border/80 shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1.5rem)] rounded-xl bg-steam-nav/95 backdrop-blur-xl border border-steam-border/80 shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
           {/* User info banner inside dropdown */}
           <div className="px-4 py-2.5 border-b border-steam-border/60 flex items-center gap-3">
             <div

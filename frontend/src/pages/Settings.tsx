@@ -242,7 +242,7 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
             <SettingsIcon className="w-7 h-7 text-steam-accent" />
@@ -261,7 +261,7 @@ export const Settings: React.FC = () => {
         </div>
 
         {saveSuccess && (
-          <div className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+          <div className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2 self-start sm:self-auto animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>Настройки успешно сохранены</span>
           </div>
@@ -287,12 +287,12 @@ export const Settings: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <a
                   href="/qbittorrent/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-cyan/15 hover:bg-steam-cyan/25 text-xs font-semibold text-steam-cyan border border-steam-cyan/30 transition-colors"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-cyan/15 hover:bg-steam-cyan/25 text-xs font-semibold text-steam-cyan border border-steam-cyan/30 transition-colors"
                   title="Открыть полный веб-интерфейс qBittorrent WebUI"
                 >
                   <span>Открыть Web UI</span>
@@ -302,7 +302,7 @@ export const Settings: React.FC = () => {
                   type="button"
                   onClick={testQBittorrent}
                   disabled={testingQb}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer"
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-steam-nav hover:bg-steam-cardHover text-xs font-semibold text-slate-200 border border-steam-border transition-colors cursor-pointer"
                 >
                   {testingQb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   <span>Проверить статус</span>
