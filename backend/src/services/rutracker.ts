@@ -108,20 +108,26 @@ export function getRutrackerCookieHeader(userId?: number): string {
   return `bb_session=${raw}; bb_data=${raw}; bb_ssl=1`;
 }
 
+const DEFAULT_DESKTOP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 /**
  * Common browser headers to avoid anti-bot blocks.
- * Dynamically uses the user's browser User-Agent so Cloudflare cf_clearance validation passes.
+ * Enforces desktop browser User-Agent so Cloudflare cf_clearance validation passes even when browsing from mobile devices.
  */
 export function getBrowserHeaders(extraCookie?: string, customUa?: string, userId?: number) {
   const cookie = extraCookie || getRutrackerCookieHeader(userId);
-  const ua =
+  let ua =
     customUa ||
     (userId
       ? settingsQueries.getUserSetting(userId, 'rutracker_user_agent')
-      : settingsQueries.get(
-          'rutracker_user_agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0'
-        ));
+      : settingsQueries.get('rutracker_user_agent', ''));
+
+  // If saved UA is empty, invalid, or belongs to a mobile device (iPhone/Android),
+  // always fallback to desktop Chrome UA so desktop cf_clearance cookies do not fail!
+  if (!ua || ua.includes('Mobile') || ua.includes('iPhone') || ua.includes('Android') || ua.includes('node') || ua.includes('axios')) {
+    ua = DEFAULT_DESKTOP_UA;
+  }
 
   return {
     'User-Agent': ua,
@@ -286,6 +292,15 @@ export async function searchRutracker(query: string, userId?: number): Promise<R
       releases,
     };
   } catch (err: any) {
+    if (err.response?.status === 403) {
+      return {
+        configured: true,
+        query: cleanQ,
+        total: 0,
+        releases: [],
+        error: 'Доступ ограничен Cloudflare (403 Forbidden). Обновите cookie cf_clearance и bb_session в разделе Настройки.',
+      };
+    }
     return {
       configured: true,
       query: cleanQ,

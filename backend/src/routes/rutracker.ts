@@ -11,16 +11,6 @@ import { authenticate, getAuthUser } from '../middleware/auth.js';
 
 export async function rutrackerRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', async (request) => {
-    const user = getAuthUser(request);
-    const ua = request.headers['user-agent'];
-    if (ua && !ua.includes('node') && !ua.includes('axios')) {
-      if (user?.id) {
-        settingsQueries.setUserSetting(user.id, 'rutracker_user_agent', ua);
-      }
-      settingsQueries.set('rutracker_user_agent', ua);
-    }
-  });
 
   // Status check: whether RuTracker credentials/cookies are set for this user
   fastify.get('/status', async (request) => {
