@@ -601,6 +601,38 @@ export const Settings: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Путь к папке сторонних игр (Custom Games Directory)
+                </label>
+                <input
+                  type="text"
+                  value={settings.custom_games_path || ''}
+                  onChange={(e) => handleChange('custom_games_path', e.target.value)}
+                  placeholder="/mnt/game_data/Games"
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Основной каталог для скачивания торрентов и сканирования сторонних игр (не из Steam). По умолчанию: <code>/mnt/game_data/Games</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Путь к библиотеке Steam (SteamLibrary)
+                </label>
+                <input
+                  type="text"
+                  value={settings.steam_library_path || ''}
+                  onChange={(e) => handleChange('steam_library_path', e.target.value)}
+                  placeholder="/mnt/game_data/SteamLibrary"
+                  className="w-full bg-steam-nav text-slate-100 font-mono text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Каталог официальной библиотеки Steam с манифестами <code>appmanifest_*.acf</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Путь к директории userdata Steam
                 </label>
                 <input

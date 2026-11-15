@@ -68,7 +68,9 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
 
     try {
       const user = getAuthUser(request);
-      const result = await downloadTorrentToQBit(numId, savePath, mode, user?.id);
+      const defaultGamesPath = settingsQueries.get('custom_games_path', '/mnt/game_data/Games');
+      const targetPath = (savePath && savePath.trim().length > 0) ? savePath.trim() : defaultGamesPath;
+      const result = await downloadTorrentToQBit(numId, targetPath, mode, user?.id);
       return result;
     } catch (err: any) {
       return reply.status(500).send({

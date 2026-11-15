@@ -274,7 +274,7 @@ export function findSteamLibraryFolders(): string[] {
     }
   };
 
-  // Primary direct mount
+// Primary direct mount
   addLib('/mnt/game_data/SteamLibrary');
 
   // Configured path
@@ -311,6 +311,46 @@ export function findSteamLibraryFolders(): string[] {
   }
 
   return libraries;
+}
+
+export function getCustomGamesDirs(): string[] {
+  const dirs: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (candidate: string) => {
+    if (!candidate) return;
+    const clean = toCleanPath(candidate).trim();
+    if (!clean) return;
+    const internal = toInternalPath(clean);
+    let target = '';
+    if (fs.existsSync(internal)) {
+      target = internal;
+    } else if (fs.existsSync(clean)) {
+      target = clean;
+    } else if (fs.existsSync('/host_root' + clean)) {
+      target = '/host_root' + clean;
+    }
+
+    if (!target) return;
+    const cleanKey = toCleanPath(target).toLowerCase();
+    if (!seen.has(cleanKey)) {
+      seen.add(cleanKey);
+      dirs.push(target);
+    }
+  };
+
+  // 1. Configured custom games path in settings
+  const configured = settingsQueries.get('custom_games_path', config.customGamesPath);
+  if (configured) add(configured);
+
+  // 2. Default high-speed NVMe Games mount
+  add('/mnt/game_data/Games');
+  add('/host_root/mnt/game_data/Games');
+
+  // 3. Environment variable if set
+  if (process.env.CUSTOM_GAMES_PATH) add(process.env.CUSTOM_GAMES_PATH);
+
+  return dirs;
 }
 
 export interface InstalledGameInfo {
@@ -440,6 +480,59 @@ export function scanInstalledGames(): { libraries: Array<{ path: string; display
       displayPath: toCleanPath(libDir),
       gamesCount: libGameCount,
     });
+  }
+
+  // 3. Scan Custom Games Directories (Default: /mnt/game_data/Games)
+  const customDirs = getCustomGamesDirs();
+  for (const customDir of customDirs) {
+    let customGameCount = 0;
+    if (fs.existsSync(customDir)) {
+      try {
+        const entries = fs.readdirSync(customDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const folderName = entry.name;
+            if (isTechnicalOrJunk(folderName, folderName)) continue;
+
+            const normalizedFolder = folderName.toLowerCase();
+            const cleanedName = cleanGameTitle(folderName);
+            const resolvedAppId = resolveAppIdByName(folderName) || resolveAppIdByName(cleanedName);
+            const uniqueKey = resolvedAppId ? `steam_${resolvedAppId}` : `custom_${normalizedFolder}`;
+
+            if (!seenGameKeys.has(uniqueKey)) {
+              seenGameKeys.add(uniqueKey);
+              const gameFullPath = path.join(customDir, folderName);
+              customGameCount++;
+
+              allGames.push({
+                appId: resolvedAppId,
+                name: cleanedName,
+                installDir: folderName,
+                fullPath: gameFullPath,
+                displayPath: toCleanPath(gameFullPath),
+                sizeBytes: 0,
+                sizeFormatted: 'Сторонняя игра',
+                headerImage: resolvedAppId ? `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${resolvedAppId}/header.jpg` : '',
+                isOfficialSteam: false,
+                libraryPath: customDir,
+                libraryDisplayPath: toCleanPath(customDir),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Steam] Error scanning custom games dir in ${customDir}:`, err);
+      }
+    }
+
+    const cleanCustom = toCleanPath(customDir);
+    if (!librariesSummary.some((l) => l.displayPath.toLowerCase() === cleanCustom.toLowerCase())) {
+      librariesSummary.push({
+        path: customDir,
+        displayPath: cleanCustom,
+        gamesCount: customGameCount,
+      });
+    }
   }
 
   // Sort games by name
@@ -1768,6 +1861,8 @@ export function isSafeGameFolderToDelete(targetPath: string): { safe: boolean; r
     '/host_root/home/gamecube', '/host_root/home/deck',
     '/home/gamecube', '/home/deck',
     '/mnt/game_data',
+    '/mnt/game_data/games',
+    '/mnt/game_data/downloads',
     '/mnt/game_data/steamlibrary',
     '/mnt/game_data/steamlibrary/steamapps',
     '/mnt/game_data/steamlibrary/steamapps/common',
@@ -1804,17 +1899,35 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // List discovered Steam libraries
+  // List discovered Steam libraries & Custom Games directories
   fastify.get('/libraries', async (request, reply) => {
     try {
       const rawLibs = findSteamLibraryFolders();
+      const customLibs = getCustomGamesDirs();
+      const list: Array<{ path: string; displayPath: string; commonPath: string; exists: boolean; type: string }> = rawLibs.map((p) => ({
+        path: p,
+        displayPath: toCleanPath(p),
+        commonPath: toCleanPath(path.join(p, 'steamapps', 'common')),
+        exists: fs.existsSync(p),
+        type: 'steam',
+      }));
+
+      for (const c of customLibs) {
+        const cleanC = toCleanPath(c);
+        if (!list.some((l) => l.displayPath.toLowerCase() === cleanC.toLowerCase())) {
+          list.push({
+            path: c,
+            displayPath: cleanC,
+            commonPath: cleanC,
+            exists: fs.existsSync(c),
+            type: 'custom',
+          });
+        }
+      }
+
       return {
-        libraries: rawLibs.map((p) => ({
-          path: p,
-          displayPath: toCleanPath(p),
-          commonPath: toCleanPath(path.join(p, 'steamapps', 'common')),
-          exists: fs.existsSync(p),
-        })),
+        libraries: list,
+        defaultCustomGamesPath: '/mnt/game_data/Games',
       };
     } catch (err: any) {
       return reply.status(500).send({

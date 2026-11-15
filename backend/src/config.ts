@@ -12,6 +12,7 @@ export const config = {
   hostRoot: process.env.HOST_ROOT || (isWindows ? 'C:\\' : '/host_root'),
   steamUserDataPath: process.env.STEAM_USERDATA_PATH || (isWindows ? 'C:\\Program Files (x86)\\Steam\\userdata' : '/host_root/home/gamecube/.local/share/Steam/userdata'),
   steamLibraryPath: process.env.STEAM_LIBRARY_PATH || (isWindows ? 'D:\\SteamLibrary' : '/host_root/mnt/game_data/SteamLibrary'),
+  customGamesPath: process.env.CUSTOM_GAMES_PATH || (isWindows ? 'D:\\Games' : '/mnt/game_data/Games'),
   qbittorrent: {
     url: process.env.QBITTORRENT_URL || 'http://127.0.0.1:8085',
     username: process.env.QBITTORRENT_USER || 'admin',

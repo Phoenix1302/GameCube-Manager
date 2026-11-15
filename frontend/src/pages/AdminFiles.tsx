@@ -307,6 +307,12 @@ export const AdminFiles: React.FC = () => {
         </span>
         {[
           {
+            label: 'Игры (Games)',
+            icon: Gamepad2,
+            path: '/mnt/game_data/Games',
+            color: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+          },
+          {
             label: 'Steam common',
             icon: Gamepad2,
             path: '/mnt/game_data/SteamLibrary/steamapps/common',

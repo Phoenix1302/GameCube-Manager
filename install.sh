@@ -250,6 +250,21 @@ fi
 mkdir -p "$DOWNLOADS_DIR"
 echo -e "    ${GREEN}✔${NC} Torrent Downloads folder: ${CYAN}${DOWNLOADS_DIR}${NC}"
 
+# Detect Third-Party Games Directory (/mnt/game_data/Games)
+GAMES_DIR=""
+if [ -d "/mnt/game_data" ] && [ -w "/mnt/game_data" ]; then
+    GAMES_DIR="/mnt/game_data/Games"
+elif [ -d "/mnt/game_data" ]; then
+    sudo mkdir -p "/mnt/game_data/Games"
+    sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "/mnt/game_data/Games"
+    GAMES_DIR="/mnt/game_data/Games"
+else
+    GAMES_DIR="${USER_HOME}/Games"
+fi
+
+mkdir -p "$GAMES_DIR"
+echo -e "    ${GREEN}✔${NC} Third-party Games folder: ${CYAN}${GAMES_DIR}${NC}"
+
 # User systemd lingering (ensures containers start on system boot without requiring GUI login)
 loginctl enable-linger "$CURRENT_USER" >/dev/null 2>&1 || true
 echo -e "    ${GREEN}✔${NC} Enabled systemd lingering for user ${CURRENT_USER} (runs on boot)"
@@ -313,6 +328,7 @@ Environment=NODE_ENV=production
 Environment=HOST_ROOT=/host_root
 Environment=STEAM_USERDATA_PATH=/host_root${STEAM_USERDATA}
 Environment=STEAM_LIBRARY_PATH=/host_root${STEAM_LIBRARY}
+Environment=CUSTOM_GAMES_PATH=${GAMES_DIR}
 Environment=QBITTORRENT_URL=http://127.0.0.1:8085
 SecurityLabelDisable=true
 

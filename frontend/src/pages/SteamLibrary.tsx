@@ -370,7 +370,7 @@ export const SteamLibrary: React.FC = () => {
     setModalGame(game || null);
     setShowManualExeInput(false);
     const initialName = game ? game.name : '';
-    const initialPath = game ? game.fullPath || game.displayPath : '/mnt/game_data';
+    const initialPath = game ? game.fullPath || game.displayPath : '/mnt/game_data/Games';
     setModalAppName(initialName);
     setArtworkSearchQuery(initialName);
     setModalGamePath(initialPath);
@@ -943,22 +943,22 @@ export const SteamLibrary: React.FC = () => {
                     type="text"
                     value={exePath}
                     onChange={(e) => handleExeChange(e.target.value)}
-                placeholder="/host_root/games/Cyberpunk2077/bin/x64/Cyberpunk2077.exe"
-                required
-                className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
-              />
-            </div>
+                    placeholder="/mnt/game_data/Games/GodOfWar/GoW.exe"
+                    required
+                    className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                  />
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Рабочая папка (StartDir)
-                </label>
-                <input
-                  type="text"
-                  value={startDir}
-                  onChange={(e) => setStartDir(e.target.value)}
-                  placeholder="/host_root/games/Cyberpunk2077/bin/x64"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Рабочая папка (StartDir)
+                    </label>
+                    <input
+                      type="text"
+                      value={startDir}
+                      onChange={(e) => setStartDir(e.target.value)}
+                      placeholder="/mnt/game_data/Games/GodOfWar"
                   className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                 />
               </div>
@@ -1244,7 +1244,7 @@ export const SteamLibrary: React.FC = () => {
                   onBlur={() => {
                     if (modalGamePath.trim()) scanExecutablesForPath(modalGamePath.trim());
                   }}
-                  placeholder="/mnt/game_data/SteamLibrary/steamapps/common/Dead Space (2023)"
+                  placeholder="/mnt/game_data/Games/GodOfWar"
                   required
                   className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                 />
@@ -1306,7 +1306,7 @@ export const SteamLibrary: React.FC = () => {
                       type="text"
                       value={modalSelectedExe}
                       onChange={(e) => setModalSelectedExe(e.target.value)}
-                      placeholder="/mnt/game_data/SteamLibrary/steamapps/common/Dead Space (2023)/Dead Space.exe"
+                      placeholder="/mnt/game_data/Games/GodOfWar/GoW.exe"
                       required
                       className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                     />

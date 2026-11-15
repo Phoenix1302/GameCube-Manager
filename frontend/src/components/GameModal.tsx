@@ -51,7 +51,7 @@ export const GameModal: React.FC<GameModalProps> = ({
   const [rutrackerError, setRutrackerError] = useState<string | null>(null);
   const [rutrackerConfigured, setRutrackerConfigured] = useState<boolean | null>(null);
   const [customSearchQuery, setCustomSearchQuery] = useState('');
-  const [downloadSavePath, setDownloadSavePath] = useState<string>('/downloads');
+  const [downloadSavePath, setDownloadSavePath] = useState<string>('/mnt/game_data/Games');
   const [downloadingTopicId, setDownloadingTopicId] = useState<number | null>(null);
   const [downloadSuccessMap, setDownloadSuccessMap] = useState<Record<number, boolean>>({});
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
@@ -436,6 +436,7 @@ export const GameModal: React.FC<GameModalProps> = ({
                       onChange={(e) => setDownloadSavePath(e.target.value)}
                       className="bg-steam-nav text-slate-200 border border-steam-border text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-steam-blue font-mono"
                     >
+                      <option value="/mnt/game_data/Games">Папка сторонних игр (/mnt/game_data/Games) — По умолчанию</option>
                       <option value="/downloads">Папка загрузок (/mnt/game_data/Downloads)</option>
                       <option value="/mnt/game_data/SteamLibrary/steamapps/common">Библиотека Steam (/mnt/game_data/SteamLibrary/steamapps/common)</option>
                     </select>

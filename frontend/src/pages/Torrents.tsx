@@ -23,6 +23,7 @@ import {
   X,
   Magnet,
   Copy,
+  FolderOpen,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useConfirm } from '../context/ConfirmContext';
@@ -50,6 +51,7 @@ export const Torrents: React.FC = () => {
   // RuTracker Search Modal states
   const [showRutrackerModal, setShowRutrackerModal] = useState(false);
   const [ruSearchQuery, setRuSearchQuery] = useState('');
+  const [ruSavePath, setRuSavePath] = useState('/mnt/game_data/Games');
   const [ruSearching, setRuSearching] = useState(false);
   const [ruReleases, setRuReleases] = useState<RutrackerRelease[]>([]);
   const [ruError, setRuError] = useState<string | null>(null);
@@ -117,6 +119,7 @@ export const Torrents: React.FC = () => {
     try {
       await api.post('/rutracker/download', {
         topicId: release.id,
+        savePath: ruSavePath || '/mnt/game_data/Games',
       });
       setRuSuccessMap((prev) => ({ ...prev, [release.id]: true }));
       setRuStatusMsg(`Раздача #${release.id} отправлена в qBittorrent!`);
@@ -669,8 +672,8 @@ export const Torrents: React.FC = () => {
                   type="text"
                   value={savePath}
                   onChange={(e) => setSavePath(e.target.value)}
-                  placeholder="/host_root/games/downloads"
-                  className="w-full bg-steam-card text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                  placeholder="/mnt/game_data/Games"
+                  className="w-full bg-steam-card text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
                 />
               </div>
 
@@ -808,6 +811,23 @@ export const Torrents: React.FC = () => {
                 <span>Найти</span>
               </button>
             </form>
+
+            {/* Target save directory picker */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 mb-4 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <FolderOpen className="w-3.5 h-3.5 text-steam-cyan" />
+                <span>Папка назначения:</span>
+              </div>
+              <select
+                value={ruSavePath}
+                onChange={(e) => setRuSavePath(e.target.value)}
+                className="bg-steam-card text-slate-200 border border-steam-border text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-steam-blue font-mono"
+              >
+                <option value="/mnt/game_data/Games">Папка сторонних игр (/mnt/game_data/Games) — По умолчанию</option>
+                <option value="/downloads">Папка загрузок (/mnt/game_data/Downloads)</option>
+                <option value="/mnt/game_data/SteamLibrary/steamapps/common">Библиотека Steam (/mnt/game_data/SteamLibrary/steamapps/common)</option>
+              </select>
+            </div>
 
             {/* Error or Not Configured Warning */}
             {ruError && (

@@ -17,6 +17,7 @@ Environment=NODE_ENV=production
 Environment=HOST_ROOT=/host_root
 Environment=STEAM_USERDATA_PATH=/host_root/home/gamecube/.local/share/Steam/userdata
 Environment=STEAM_LIBRARY_PATH=/host_root/mnt/game_data/SteamLibrary
+Environment=CUSTOM_GAMES_PATH=/mnt/game_data/Games
 Environment=QBITTORRENT_URL=http://127.0.0.1:8085
 SecurityLabelDisable=true
 

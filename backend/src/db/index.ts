@@ -147,6 +147,8 @@ export function initDb() {
     qbittorrent_pass: config.qbittorrent.password,
     steamgriddb_api_key: config.steamGridDbApiKey,
     steam_userdata_path: config.steamUserDataPath,
+    steam_library_path: config.steamLibraryPath,
+    custom_games_path: config.customGamesPath,
     host_root: config.hostRoot,
     cache_max_size_mb: '500',
     cache_max_age_days: '14',
