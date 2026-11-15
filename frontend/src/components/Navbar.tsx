@@ -68,25 +68,13 @@ export const Navbar: React.FC = () => {
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-steam-blue to-steam-cyan flex items-center justify-center shadow-md shadow-steam-blue/25 group-hover:scale-105 transition-transform duration-200 flex-shrink-0">
                 <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
-                  GAMECUBE
-                </span>
-                <span className={`text-[10px] sm:text-xs px-1.5 py-0.5 font-semibold rounded border whitespace-nowrap ${
-                  isAdmin
-                    ? 'bg-steam-cyan/20 text-steam-cyan border-steam-cyan/30'
-                    : 'bg-steam-blue/20 text-steam-accent border-steam-blue/30'
-                }`}>
-                  {isAdmin ? 'ADMIN' : 'PORTAL'}
-                </span>
-                <span className="hidden md:inline-block text-[10px] text-slate-400 font-mono font-medium">
-                  v1.1.1
-                </span>
-              </div>
+              <span className="font-extrabold text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
+                GAMECUBE
+              </span>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className="hidden lg:flex items-center space-x-1.5">
+            <div className="hidden xl:flex items-center space-x-1 2xl:space-x-1.5">
               {currentNavItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -94,7 +82,7 @@ export const Navbar: React.FC = () => {
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
-                      `flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition-all duration-150 ${
+                      `flex items-center gap-1.5 2xl:gap-2 px-2.5 2xl:px-3 py-1.5 2xl:py-2 rounded-xl text-xs 2xl:text-sm font-semibold tracking-wide whitespace-nowrap transition-all duration-150 ${
                         isActive
                           ? isAdmin
                             ? 'bg-steam-card text-steam-cyan border border-steam-cyan/40 shadow-sm'
@@ -118,7 +106,7 @@ export const Navbar: React.FC = () => {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-steam-card active:scale-95 transition-all flex-shrink-0 focus:outline-none"
+              className="xl:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-steam-card active:scale-95 transition-all flex-shrink-0 focus:outline-none"
               aria-label="Меню навигации"
             >
               {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
@@ -129,7 +117,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-steam-nav/98 backdrop-blur-xl border-b border-steam-border px-3.5 sm:px-6 pt-2 pb-5 space-y-3 animate-in slide-in-from-top-2 duration-150">
+        <div className="xl:hidden bg-steam-nav/98 backdrop-blur-xl border-b border-steam-border px-3.5 sm:px-6 pt-2 pb-5 space-y-3 animate-in slide-in-from-top-2 duration-150">
           {/* User profile card inside drawer */}
           {user && (
             <div className="p-3 rounded-xl bg-steam-card/80 border border-steam-border flex items-center justify-between gap-3">

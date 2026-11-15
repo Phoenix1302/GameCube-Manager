@@ -53,13 +53,13 @@ export const UserPill: React.FC = () => {
         </div>
 
         {/* Username */}
-        <span className="hidden sm:inline-block text-sm font-medium text-slate-200 group-hover:text-white transition-colors max-w-[120px] truncate">
+        <span className="hidden sm:inline-block text-xs 2xl:text-sm font-medium text-slate-200 group-hover:text-white transition-colors max-w-[90px] 2xl:max-w-[130px] truncate">
           {user.username}
         </span>
 
         {/* Admin Badge */}
         {isAdmin && (
-          <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase">
+          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-steam-cyan/15 text-steam-cyan border border-steam-cyan/30 uppercase">
             <ShieldCheck className="w-3 h-3" />
             ADMIN
           </span>

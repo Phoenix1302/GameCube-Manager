@@ -242,46 +242,48 @@ export const AdminMonitoring: React.FC = () => {
       </div>
 
       {/* Host Summary KPI Pills */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-3 shadow-md">
-          <div className="p-2.5 rounded-xl bg-steam-blue/20 text-steam-blue">
-            <Server className="w-5 h-5 flex-shrink-0" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-3 sm:p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-2.5 sm:gap-3 shadow-md min-w-0">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-steam-blue/20 text-steam-blue flex-shrink-0">
+            <Server className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="overflow-hidden">
-            <div className="text-[11px] text-slate-400 font-medium">Дистрибутив / ОС</div>
-            <div className="text-sm font-bold text-white truncate" title={stats.os.distro}>
+          <div className="overflow-hidden min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">Дистрибутив / ОС</div>
+            <div className="text-xs sm:text-sm font-bold text-white truncate" title={stats.os.distro}>
               {stats.os.distro || stats.os.platform}
             </div>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-3 shadow-md">
-          <div className="p-2.5 rounded-xl bg-steam-cyan/20 text-steam-cyan">
-            <Zap className="w-5 h-5 flex-shrink-0" />
+        <div className="p-3 sm:p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-2.5 sm:gap-3 shadow-md min-w-0">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-steam-cyan/20 text-steam-cyan flex-shrink-0">
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div className="overflow-hidden">
-            <div className="text-[11px] text-slate-400 font-medium">Хостнейм</div>
-            <div className="text-sm font-bold text-white truncate">{stats.os.hostname || 'SteamMachine'}</div>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-3 shadow-md">
-          <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400">
-            <Clock className="w-5 h-5 flex-shrink-0" />
-          </div>
-          <div>
-            <div className="text-[11px] text-slate-400 font-medium">Время работы (Uptime)</div>
-            <div className="text-sm font-bold text-white font-mono">{formatUptime(stats.uptime)}</div>
+          <div className="overflow-hidden min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">Хостнейм</div>
+            <div className="text-xs sm:text-sm font-bold text-white truncate" title={stats.os.hostname || 'SteamMachine'}>
+              {stats.os.hostname || 'SteamMachine'}
+            </div>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-3 shadow-md">
-          <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400">
-            <Thermometer className="w-5 h-5 flex-shrink-0" />
+        <div className="p-3 sm:p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-2.5 sm:gap-3 shadow-md min-w-0">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 flex-shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <div className="text-[11px] text-slate-400 font-medium">Температура CPU</div>
-            <div className="text-sm font-bold text-white font-mono">
+          <div className="overflow-hidden min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">Время работы (Uptime)</div>
+            <div className="text-xs sm:text-sm font-bold text-white font-mono truncate">{formatUptime(stats.uptime)}</div>
+          </div>
+        </div>
+
+        <div className="p-3 sm:p-4 rounded-2xl bg-steam-card/90 border border-steam-border/80 flex items-center gap-2.5 sm:gap-3 shadow-md min-w-0">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-rose-500/20 text-rose-400 flex-shrink-0">
+            <Thermometer className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="overflow-hidden min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">Температура CPU</div>
+            <div className="text-xs sm:text-sm font-bold text-white font-mono truncate">
               {stats.cpu.temperature ? `${stats.cpu.temperature}°C` : 'В норме'}
             </div>
           </div>
@@ -291,30 +293,30 @@ export const AdminMonitoring: React.FC = () => {
       {/* Main Dual Charts: Multi-Core CPU & Memory/Swap Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CPU Card with Live Multi-Core Colorful Chart */}
-        <div className="p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-steam-blue/20 text-steam-blue">
-                <Cpu className="w-6 h-6" />
+        <div className="p-4 sm:p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-steam-blue/20 text-steam-blue flex-shrink-0">
+                <Cpu className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>Процессор (CPU)</span>
-                  <span className="text-xs font-normal text-slate-400 font-mono">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <span className="truncate">Процессор (CPU)</span>
+                  <span className="text-xs font-normal text-slate-400 font-mono whitespace-nowrap">
                     {stats.cpu.cores} ядер
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400 truncate max-w-[280px] sm:max-w-md">
+                <p className="text-xs text-slate-400 truncate max-w-full" title={stats.cpu.brand}>
                   {stats.cpu.brand}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-black text-steam-accent font-mono tracking-tight">
+            <div className="flex items-baseline gap-1 flex-shrink-0 pl-1">
+              <span className="text-2xl sm:text-3xl font-black text-steam-accent font-mono tracking-tight">
                 {stats.cpu.loadPercentage}
               </span>
-              <span className="text-sm font-bold text-steam-accent/70 font-mono">%</span>
+              <span className="text-xs sm:text-sm font-bold text-steam-accent/70 font-mono">%</span>
             </div>
           </div>
 
@@ -350,25 +352,25 @@ export const AdminMonitoring: React.FC = () => {
         </div>
 
         {/* RAM Card with Live Memory & Swap Breakdown Chart */}
-        <div className="p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-steam-cyan/20 text-steam-cyan">
-                <Layers className="w-6 h-6" />
+        <div className="p-4 sm:p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-steam-cyan/20 text-steam-cyan flex-shrink-0">
+                <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Оперативная память и Swap</h3>
-                <p className="text-xs text-slate-400 font-mono">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-bold text-white truncate">Оперативная память и Swap</h3>
+                <p className="text-xs text-slate-400 font-mono truncate">
                   Занято {formatBytes(stats.memory.used)} из {formatBytes(stats.memory.total)}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-black text-steam-cyan font-mono tracking-tight">
+            <div className="flex items-baseline gap-1 flex-shrink-0 pl-1">
+              <span className="text-2xl sm:text-3xl font-black text-steam-cyan font-mono tracking-tight">
                 {stats.memory.percent}
               </span>
-              <span className="text-sm font-bold text-steam-cyan/70 font-mono">%</span>
+              <span className="text-xs sm:text-sm font-bold text-steam-cyan/70 font-mono">%</span>
             </div>
           </div>
 
@@ -477,15 +479,15 @@ export const AdminMonitoring: React.FC = () => {
       {/* Network and Disks Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Network Card with Real-time Bandwidth Dual Chart */}
-        <div className="p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400">
-                <Network className="w-6 h-6" />
+        <div className="p-4 sm:p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 flex-shrink-0">
+                <Network className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Сетевая активность</h3>
-                <p className="text-xs text-slate-400">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-white truncate">Сетевая активность</h3>
+                <p className="text-xs text-slate-400 truncate">
                   Трафик в реальном времени (Загрузка ↓ / Отдача ↑)
                 </p>
               </div>
@@ -624,26 +626,26 @@ export const AdminMonitoring: React.FC = () => {
         </div>
 
         {/* Disks Card with Visual Storage Capacity */}
-        <div className="p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-slate-800 text-slate-300">
-                <HardDrive className="w-6 h-6" />
+        <div className="p-4 sm:p-6 rounded-2xl bg-steam-card/90 border border-steam-border/80 shadow-xl space-y-5">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-slate-800 text-slate-300 flex-shrink-0">
+                <HardDrive className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>Дисковые накопители</span>
-                  <span className="text-xs font-normal text-slate-400 font-mono">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="truncate">Дисковые накопители</span>
+                  <span className="text-xs font-normal text-slate-400 font-mono whitespace-nowrap">
                     ({stats.disks.length} разд.)
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 truncate">
                   Занятое и свободное дисковое пространство
                 </p>
               </div>
             </div>
 
-            <div className="text-xs font-mono text-slate-400 bg-steam-nav px-2.5 py-1 rounded-lg border border-steam-border/60">
+            <div className="text-xs font-mono text-slate-400 bg-steam-nav px-2.5 py-1 rounded-lg border border-steam-border/60 flex-shrink-0">
               Хранилище
             </div>
           </div>
