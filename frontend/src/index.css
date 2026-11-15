@@ -16,21 +16,51 @@
 }
 
 /* Custom SteamOS gaming scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3a4f transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d131b;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #253346;
-  border-radius: 4px;
+  background: #2a3a4f;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #1a9fff;
+}
+
+/* Dedicated custom-scrollbar class for modals, releases lists, and dialogs */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3a4f transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #2a3a4f;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #1a9fff;
 }
 

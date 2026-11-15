@@ -399,7 +399,7 @@ user_systemctl start gamecube-pod.service gamecube-web.service gamecube-torrent.
 echo -e "    Waiting for services to initialize..."
 HEALTHY=false
 for i in {1..20}; do
-    if curl -sk --fail "https://127.0.0.1/api/auth/setup-status" >/dev/null 2>&1; then
+    if curl -skL --fail "http://127.0.0.1/api/auth/setup-status" >/dev/null 2>&1 || curl -skL --fail "https://127.0.0.1/api/auth/setup-status" >/dev/null 2>&1; then
         HEALTHY=true
         break
     fi
@@ -416,8 +416,8 @@ else
     echo -e "  🎮 ${BOLD}${YELLOW}GameCube-Manager started (initializing)...${NC}"
 fi
 echo -e "${GREEN}==========================================================================${NC}"
-echo -e "  • Web Portal (HTTPS): ${BOLD}${CYAN}https://${LAN_IP}${NC}  (or https://localhost)"
-echo -e "  • Web Portal (HTTP):  ${BOLD}http://${LAN_IP}${NC}   (auto-redirects to HTTPS)"
+echo -e "  • Web Portal (Локальная сеть / LAN): ${BOLD}${CYAN}http://${LAN_IP}${NC}  (HTTP порт 80, без предупреждений SSL)"
+echo -e "  • Web Portal (Внешний доступ / WAN):  ${BOLD}https://${LAN_IP}${NC} (HTTPS порт 443, авторедирект извне)"
 echo -e "  • Torrent Downloads:  ${BOLD}${DOWNLOADS_DIR}${NC}"
 echo -e "  • Steam Userdata:     ${BOLD}${STEAM_USERDATA}${NC}"
 echo ""

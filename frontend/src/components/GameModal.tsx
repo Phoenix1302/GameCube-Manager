@@ -216,11 +216,11 @@ export const GameModal: React.FC<GameModalProps> = ({
   const modalContent = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-3xl my-auto max-h-[90vh] overflow-y-auto bg-steam-nav border border-steam-border/90 rounded-2xl shadow-2xl p-4 sm:p-6"
+        className="relative w-full max-w-3xl my-auto max-h-[92vh] flex flex-col bg-steam-nav border border-steam-border/90 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden"
       >
         {/* Prominent High-Visibility Close [X] Button */}
         <button
@@ -233,13 +233,14 @@ export const GameModal: React.FC<GameModalProps> = ({
         </button>
 
         {loading || !details ? (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400 p-6">
             <Loader2 className="w-10 h-10 text-steam-blue animate-spin mb-3" />
             <p className="text-sm font-medium">Получение информации о ценах и ProtonDB...</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Header Banner */}
+          <>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
+              {/* Header Banner */}
             <div className="relative rounded-xl overflow-hidden aspect-[16/7] w-full bg-slate-900 border border-steam-border/60">
               <img
                 src={details.headerImage}
@@ -475,7 +476,7 @@ export const GameModal: React.FC<GameModalProps> = ({
 
                   {/* Releases list */}
                   {!searchingRutracker && rutrackerReleases.length > 0 && (
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                    <div className="max-h-72 sm:max-h-80 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                       {rutrackerReleases.map((rel) => {
                         const isDownloaded = downloadSuccessMap[rel.id];
                         const isDownloading = downloadingTopicId === rel.id;
@@ -587,8 +588,10 @@ export const GameModal: React.FC<GameModalProps> = ({
               )}
             </div>
 
-            {/* Modal Actions */}
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-steam-border/80">
+            </div>
+
+            {/* Modal Actions (Sticky Footer) */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 p-4 sm:px-6 py-3.5 bg-steam-nav/95 backdrop-blur-md border-t border-steam-border/80 flex-shrink-0">
               <button
                 type="button"
                 onClick={onClose}
@@ -629,7 +632,7 @@ export const GameModal: React.FC<GameModalProps> = ({
                 <ExternalLink className="w-4 h-4" />
               </a>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
