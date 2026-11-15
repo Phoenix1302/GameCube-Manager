@@ -15,7 +15,43 @@ import {
 } from '../utils/vdf.js';
 
 function getSteamUserdataDir(): string {
-  return settingsQueries.get('steam_userdata_path', config.steamUserDataPath);
+  const configured = settingsQueries.get('steam_userdata_path', config.steamUserDataPath);
+  if (fs.existsSync(configured)) return configured;
+  const internal = toInternalPath(configured);
+  if (fs.existsSync(internal)) return internal;
+
+  const hostRoot = settingsQueries.get('host_root', config.hostRoot);
+  const candidates: string[] = [
+    path.join(hostRoot, 'home/gamecube/.local/share/Steam/userdata'),
+    path.join(hostRoot, 'home/gamecube/.steam/steam/userdata'),
+    path.join(hostRoot, 'home/deck/.local/share/Steam/userdata'),
+    path.join(hostRoot, 'home/deck/.steam/steam/userdata'),
+  ];
+
+  try {
+    const homeDir = path.join(hostRoot, 'home');
+    if (fs.existsSync(homeDir)) {
+      const users = fs.readdirSync(homeDir, { withFileTypes: true });
+      for (const u of users) {
+        if (u.isDirectory()) {
+          candidates.push(path.join(homeDir, u.name, '.local/share/Steam/userdata'));
+          candidates.push(path.join(homeDir, u.name, '.steam/steam/userdata'));
+          candidates.push(path.join(homeDir, u.name, '.var/app/com.valvesoftware.Steam/.local/share/Steam/userdata'));
+        }
+      }
+    }
+  } catch {}
+
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) {
+      try {
+        settingsQueries.set('steam_userdata_path', cand);
+      } catch {}
+      return cand;
+    }
+  }
+
+  return configured;
 }
 
 function getSteamGridDbKey(): string {

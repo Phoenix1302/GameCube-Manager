@@ -54,32 +54,28 @@ export function resolveFullPath(relOrAbsPath: string): string {
     return path.normalize(relOrAbsPath);
   }
 
-  // If path directly exists inside container (e.g. direct volume mount like /mnt/game_data)
-  if (path.isAbsolute(relOrAbsPath)) {
-    if (fs.existsSync(relOrAbsPath)) {
-      return path.normalize(relOrAbsPath);
-    }
-
-    // Check if an existing parent/ancestor exists directly in the container filesystem
-    let current = path.dirname(path.normalize(relOrAbsPath));
-    while (current && current !== '/' && current !== '.') {
-      if (fs.existsSync(current)) {
-        if (current !== hostRoot) {
-          return path.normalize(relOrAbsPath);
-        }
-        break;
-      }
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-
-  // Check if prepending hostRoot exists
   const cleanRel = relOrAbsPath.replace(/^[/\\]+/, '');
   const withHostRoot = path.resolve(hostRoot, cleanRel);
+
+  // 1. If withHostRoot exists on the host filesystem, ALWAYS return it!
+  // This correctly maps /home/..., /etc/..., /var/... to /host_root/home/..., /host_root/etc/..., etc.
   if (fs.existsSync(withHostRoot)) {
     return withHostRoot;
+  }
+
+  // 2. If path directly exists inside container (e.g. direct volume mounts like /mnt/game_data)
+  if (path.isAbsolute(relOrAbsPath) && fs.existsSync(relOrAbsPath)) {
+    return path.normalize(relOrAbsPath);
+  }
+
+  // 3. For newly created paths that do not exist yet on disk:
+  // Check if it belongs to an allowed container root (like custom_games_path or /downloads)
+  const allowedRoots = getUserAllowedRoots();
+  for (const r of allowedRoots) {
+    const normRoot = path.resolve(r);
+    if (isInsideOrEqual(path.resolve(relOrAbsPath), normRoot)) {
+      return path.normalize(relOrAbsPath);
+    }
   }
 
   return withHostRoot;
@@ -259,6 +255,100 @@ export function isAtUserRoot(user: JwtPayload, fullPath: string): boolean {
   return false;
 }
 
+export function findRealSteamUserdataDir(): string {
+  const hostRoot = getHostRoot();
+  const configured = settingsQueries.get('steam_userdata_path', config.steamUserDataPath);
+  const resolved = resolveFullPath(configured);
+  if (fs.existsSync(resolved)) {
+    return resolved;
+  }
+
+  // Candidates on the host filesystem
+  const candidates: string[] = [
+    path.join(hostRoot, 'home/gamecube/.local/share/Steam/userdata'),
+    path.join(hostRoot, 'home/gamecube/.steam/steam/userdata'),
+    path.join(hostRoot, 'home/deck/.local/share/Steam/userdata'),
+    path.join(hostRoot, 'home/deck/.steam/steam/userdata'),
+  ];
+
+  // Scan all user home directories under hostRoot/home
+  try {
+    const homeDir = path.join(hostRoot, 'home');
+    if (fs.existsSync(homeDir)) {
+      const users = fs.readdirSync(homeDir, { withFileTypes: true });
+      for (const u of users) {
+        if (u.isDirectory()) {
+          candidates.push(path.join(homeDir, u.name, '.local/share/Steam/userdata'));
+          candidates.push(path.join(homeDir, u.name, '.steam/steam/userdata'));
+          candidates.push(path.join(homeDir, u.name, '.var/app/com.valvesoftware.Steam/.local/share/Steam/userdata'));
+        }
+      }
+    }
+  } catch {}
+
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) {
+      try {
+        settingsQueries.set('steam_userdata_path', cand);
+      } catch {}
+      return cand;
+    }
+  }
+
+  // If not found, ensure directory exists at resolved path so it is ready for use without 404
+  try {
+    fs.mkdirSync(resolved, { recursive: true });
+  } catch {}
+
+  return resolved;
+}
+
+export function findRealSteamCommonDir(): string {
+  const hostRoot = getHostRoot();
+  const configuredLib = settingsQueries.get('steam_library_path', config.steamLibraryPath);
+  const resolved = resolveFullPath(path.join(configuredLib, 'steamapps', 'common'));
+  if (fs.existsSync(resolved)) {
+    return resolved;
+  }
+
+  const candidates: string[] = [
+    '/mnt/game_data/SteamLibrary/steamapps/common',
+    path.join(hostRoot, 'mnt/game_data/SteamLibrary/steamapps/common'),
+    path.join(hostRoot, 'home/gamecube/.local/share/Steam/steamapps/common'),
+    path.join(hostRoot, 'home/deck/.local/share/Steam/steamapps/common'),
+  ];
+
+  try {
+    const homeDir = path.join(hostRoot, 'home');
+    if (fs.existsSync(homeDir)) {
+      const users = fs.readdirSync(homeDir, { withFileTypes: true });
+      for (const u of users) {
+        if (u.isDirectory()) {
+          candidates.push(path.join(homeDir, u.name, '.local/share/Steam/steamapps/common'));
+          candidates.push(path.join(homeDir, u.name, '.steam/steam/steamapps/common'));
+          candidates.push(path.join(homeDir, u.name, '.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common'));
+        }
+      }
+    }
+  } catch {}
+
+  for (const cand of candidates) {
+    if (fs.existsSync(cand)) {
+      return cand;
+    }
+  }
+
+  try {
+    if (fs.existsSync('/mnt/game_data')) {
+      const defaultMntCommon = '/mnt/game_data/SteamLibrary/steamapps/common';
+      fs.mkdirSync(defaultMntCommon, { recursive: true });
+      return defaultMntCommon;
+    }
+  } catch {}
+
+  return resolved;
+}
+
 export async function filesRoutes(fastify: FastifyInstance) {
   // File operations require valid authenticated user
   fastify.addHook('preHandler', authenticate);
@@ -289,11 +379,11 @@ export async function filesRoutes(fastify: FastifyInstance) {
       };
     }
 
-    const steamLibSetting = settingsQueries.get('steam_library_path', config.steamLibraryPath);
-    const steamCommonDisplay = toDisplayPath(path.join(steamLibSetting, 'steamapps', 'common'));
+    const steamCommonReal = findRealSteamCommonDir();
+    const steamCommonDisplay = toDisplayPath(steamCommonReal);
 
-    const steamUserDataSetting = settingsQueries.get('steam_userdata_path', config.steamUserDataPath);
-    const steamUserDataDisplay = toDisplayPath(steamUserDataSetting);
+    const steamUserDataReal = findRealSteamUserdataDir();
+    const steamUserDataDisplay = toDisplayPath(steamUserDataReal);
 
     const rootDisplay = '/';
 
@@ -324,7 +414,7 @@ export async function filesRoutes(fastify: FastifyInstance) {
       targetPath = isAdmin ? hostRoot : defaultGamesPath;
     }
 
-    const fullPath = resolveFullPath(targetPath);
+    let fullPath = resolveFullPath(targetPath);
 
     // Auto-create default games path if missing so user doesn't encounter a 404
     if (!isAdmin && (targetPath === defaultGamesPath || fullPath === resolveFullPath(defaultGamesPath))) {
@@ -332,6 +422,21 @@ export async function filesRoutes(fastify: FastifyInstance) {
         try {
           await fs.promises.mkdir(fullPath, { recursive: true });
         } catch {}
+      }
+    }
+
+    // Auto-detect or auto-create Steam Userdata if being accessed
+    const steamUserDataSetting = settingsQueries.get('steam_userdata_path', config.steamUserDataPath);
+    if (isAdmin && (targetPath === toDisplayPath(steamUserDataSetting) || fullPath === resolveFullPath(steamUserDataSetting))) {
+      if (!fs.existsSync(fullPath)) {
+        const realUserdata = findRealSteamUserdataDir();
+        if (realUserdata && fs.existsSync(realUserdata)) {
+          fullPath = realUserdata;
+        } else {
+          try {
+            await fs.promises.mkdir(fullPath, { recursive: true });
+          } catch {}
+        }
       }
     }
 
