@@ -5,6 +5,7 @@ import {
   getRutrackerMagnet,
   testRutrackerConnection,
   isRutrackerConfigured,
+  saveDesktopUserAgentIfApplicable,
 } from '../services/rutracker.js';
 import { settingsQueries } from '../db/index.js';
 import { authenticate, getAuthUser } from '../middleware/auth.js';
@@ -15,6 +16,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
   // Status check: whether RuTracker credentials/cookies are set for this user
   fastify.get('/status', async (request) => {
     const user = getAuthUser(request);
+    const ua = request.headers['user-agent'];
+    saveDesktopUserAgentIfApplicable(ua, user?.id);
     return {
       configured: isRutrackerConfigured(user?.id),
     };
@@ -30,7 +33,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
     }
 
     const user = getAuthUser(request);
-    const result = await searchRutracker(term, user?.id);
+    const ua = request.headers['user-agent'];
+    const result = await searchRutracker(term, user?.id, ua);
     return result;
   });
 
@@ -44,7 +48,8 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
 
     try {
       const user = getAuthUser(request);
-      const magnet = await getRutrackerMagnet(numId, undefined, user?.id);
+      const ua = request.headers['user-agent'];
+      const magnet = await getRutrackerMagnet(numId, undefined, user?.id, ua);
       return { topicId: numId, magnet };
     } catch (err: any) {
       return reply.status(500).send({
@@ -68,9 +73,10 @@ export async function rutrackerRoutes(fastify: FastifyInstance) {
 
     try {
       const user = getAuthUser(request);
+      const ua = request.headers['user-agent'];
       const defaultGamesPath = settingsQueries.get('custom_games_path', '/mnt/game_data/Games');
       const targetPath = (savePath && savePath.trim().length > 0) ? savePath.trim() : defaultGamesPath;
-      const result = await downloadTorrentToQBit(numId, targetPath, mode, user?.id);
+      const result = await downloadTorrentToQBit(numId, targetPath, mode, user?.id, ua);
       return result;
     } catch (err: any) {
       return reply.status(500).send({

@@ -487,8 +487,8 @@ export const AdminUsers: React.FC = () => {
                   onChange={(e) => setNewRole(e.target.value as any)}
                   className="w-full bg-steam-card text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
                 >
-                  <option value="user">Обычный пользователь (Игры, Wishlist, Торренты)</option>
-                  <option value="admin">Администратор (Полный доступ к Host Root, Терминалу и Настройкам)</option>
+                  <option value="user">Обычный пользователь</option>
+                  <option value="admin">Администратор</option>
                 </select>
               </div>
 

@@ -179,6 +179,10 @@ EOF
     echo -e "    ${GREEN}✔${NC} Configured SDDM Last Session to: ${CYAN}${GAMESCOPE_SESS}${NC}"
 fi
 
+# Ensure autologin configuration directories are writable by the container desktop user
+sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" /etc/plasmalogin.conf.d /etc/sddm.conf.d 2>/dev/null || true
+sudo chmod -R 775 /etc/plasmalogin.conf.d /etc/sddm.conf.d 2>/dev/null || true
+
 # Passwordless sudo for session switcher
 if [ -d "/etc/sudoers.d" ]; then
     cat << 'EOF' | sudo tee /etc/sudoers.d/99-gamecube-session >/dev/null

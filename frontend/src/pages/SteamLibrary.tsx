@@ -34,7 +34,7 @@ import { SteamShortcut, SteamGridAsset } from '../types';
 
 export const SteamLibrary: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { confirm, alert } = useConfirm();
 
   // Active view tab: installed games vs non-steam shortcuts
@@ -151,6 +151,14 @@ export const SteamLibrary: React.FC = () => {
 
   const [restartingSteam, setRestartingSteam] = useState(false);
   const handleRestartSteam = async () => {
+    if (!isAdmin) {
+      await alert({
+        title: 'Доступ ограничен',
+        message: 'Перезапуск Steam доступен только администратору.',
+        variant: 'warning',
+      });
+      return;
+    }
     try {
       setRestartingSteam(true);
       const res = await api.post('/steam/restart-steam');
@@ -236,6 +244,14 @@ export const SteamLibrary: React.FC = () => {
 
   const handleSaveToSteam = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      await alert({
+        title: 'Доступ ограничен',
+        message: 'Добавление игр в Steam доступно только администраторам.',
+        variant: 'warning',
+      });
+      return;
+    }
     if (!appName.trim() || !exePath.trim()) {
       await alert({
         title: 'Внимание',
@@ -430,6 +446,14 @@ export const SteamLibrary: React.FC = () => {
 
   const handleSmartAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      await alert({
+        title: 'Доступ ограничен',
+        message: 'Добавление игр в Steam доступно только администраторам.',
+        variant: 'warning',
+      });
+      return;
+    }
     if (!modalAppName.trim() || !modalSelectedExe.trim()) {
       await alert({
         title: 'Внимание',
@@ -483,6 +507,14 @@ export const SteamLibrary: React.FC = () => {
   };
 
   const handleDeleteShortcut = async (s: SteamShortcut) => {
+    if (!isAdmin) {
+      await alert({
+        title: 'Доступ ограничен',
+        message: 'Удаление ярлыков Steam доступно только администратору.',
+        variant: 'warning',
+      });
+      return;
+    }
     if (!s.appid) return;
     const cleanPath = (s.StartDir || s.Exe || '').replace(/^["]+|["]+$/g, '');
     const res = await confirm({
@@ -517,6 +549,14 @@ export const SteamLibrary: React.FC = () => {
   };
 
   const handleDeleteLocalGame = async (game: any) => {
+    if (!isAdmin) {
+      await alert({
+        title: 'Доступ ограничен',
+        message: 'Удаление игр доступно только администраторам.',
+        variant: 'warning',
+      });
+      return;
+    }
     const res = await confirm({
       title: 'Удаление сторонней игры',
       message: `Вы действительно хотите полностью удалить стороннюю игру «${game.name}» с накопителя?\n\nКаталог: ${game.displayPath}\nВсе файлы игры будут удалены безвозвратно.`,
@@ -603,27 +643,29 @@ export const SteamLibrary: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
-            <button
-              type="button"
-              onClick={handleRestartSteam}
-              disabled={restartingSteam}
-              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover border border-steam-border text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-md disabled:opacity-50 whitespace-nowrap"
-              title="Перезапустить клиент Steam или обновить Game Mode, чтобы применить новые ярлыки и обложки"
-            >
-              <RotateCcw className={`w-4 h-4 text-steam-accent ${restartingSteam ? 'animate-spin' : ''}`} />
-              <span>{restartingSteam ? 'Применение...' : 'Применить в SteamOS'}</span>
-            </button>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={handleRestartSteam}
+                disabled={restartingSteam}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover border border-steam-border text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-md disabled:opacity-50 whitespace-nowrap"
+                title="Перезапустить клиент Steam или обновить Game Mode, чтобы применить новые ярлыки и обложки"
+              >
+                <RotateCcw className={`w-4 h-4 text-steam-accent ${restartingSteam ? 'animate-spin' : ''}`} />
+                <span>{restartingSteam ? 'Применение...' : 'Применить в SteamOS'}</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => openSmartModal()}
-              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Добавить стороннюю игру</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => openSmartModal()}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Добавить стороннюю игру</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Row 2: Clean Storage Filters Bar */}
@@ -859,7 +901,7 @@ export const SteamLibrary: React.FC = () => {
                       </button>
                     )}
 
-                    {(() => {
+                    {isAdmin && (() => {
                       const alreadyInSteam = isGameInSteam(game);
                       return (
                         <button
@@ -891,16 +933,23 @@ export const SteamLibrary: React.FC = () => {
                       );
                     })()}
 
-                    {!game.isOfficialSteam && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteLocalGame(game)}
-                        className="py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border hover:border-red-500/40 transition-colors cursor-pointer"
-                        title="Удалить стороннюю игру с накопителя"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {(() => {
+                      const isSteamLib =
+                        game.isOfficialSteam ||
+                        (game.libraryPath && game.libraryPath.toLowerCase().includes('steamlibrary')) ||
+                        (game.displayPath && game.displayPath.toLowerCase().includes('steamlibrary'));
+                      if (!isAdmin || isSteamLib) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLocalGame(game)}
+                          className="py-1.5 px-2.5 rounded-lg bg-steam-card hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border hover:border-red-500/40 transition-colors cursor-pointer"
+                          title="Удалить стороннюю игру с накопителя"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -912,248 +961,252 @@ export const SteamLibrary: React.FC = () => {
       {/* TAB 2: NON-STEAM SHORTCUTS WIZARD & TABLE */}
       {activeTab === 'shortcuts' && (
         <div className="space-y-8">
-          {/* Main Wizard Form */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-            <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleSaveToSteam} className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-steam-blue" />
-                  Параметры запуска новой игры
-                </h3>
+          {/* Main Wizard Form - Admin Only */}
+          {isAdmin && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+              <div className="lg:col-span-2 space-y-6">
+                <form onSubmit={handleSaveToSteam} className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-steam-blue" />
+                    Параметры запуска новой игры
+                  </h3>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Название игры (в библиотеке Steam) *
-                  </label>
-                  <input
-                    type="text"
-                    value={appName}
-                    onChange={(e) => setAppName(e.target.value)}
-                    placeholder="Например: Cyberpunk 2077"
-                    required
-                    className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Путь к исполняемому файлу (.exe / .sh) *
-                  </label>
-                  <input
-                    type="text"
-                    value={exePath}
-                    onChange={(e) => handleExeChange(e.target.value)}
-                    placeholder="/mnt/game_data/Games/GodOfWar/GoW.exe"
-                    required
-                    className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Рабочая папка (StartDir)
+                      Название игры (в библиотеке Steam) *
                     </label>
                     <input
                       type="text"
-                      value={startDir}
-                      onChange={(e) => setStartDir(e.target.value)}
-                      placeholder="/mnt/game_data/Games/GodOfWar"
-                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Параметры запуска (Launch Options)
-                </label>
-                <input
-                  type="text"
-                  value={launchOptions}
-                  onChange={(e) => setLaunchOptions(e.target.value)}
-                  placeholder="Опционально (по умолчанию пусто)"
-                  className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
-                />
-              </div>
-            </div>
-
-            {/* Proton Version Selection */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Инструмент совместимости Proton
-              </label>
-              <select
-                value={compatTool}
-                onChange={(e) => setCompatTool(e.target.value)}
-                className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
-              >
-                <option value="proton_experimental">Proton Experimental (По умолчанию)</option>
-                <option value="GE-Proton9-20">GE-Proton9-20 (Custom GE)</option>
-                <option value="proton_9">Proton 9.0</option>
-                <option value="proton_8">Proton 8.0</option>
-                <option value="proton_hotfix">Proton Hotfix</option>
-                <option value="Wine-GE-latest">Wine-GE (Native Wine)</option>
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving || !appName.trim() || !exePath.trim()}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-steam-blue to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Сохранение в shortcuts.vdf и загрузка обложек...</span>
-                </>
-              ) : (
-                <>
-                  <FolderSync className="w-4 h-4" />
-                  <span>Добавить игру в Steam и установить обложки</span>
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* SteamGridDB Artworks Picker Sidebar */}
-        <div className="space-y-6">
-          <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-steam-cyan" />
-              Обложки SteamGridDB
-            </h3>
-            <p className="text-xs text-slate-400">
-              Найдите игру по названию, чтобы автоматически скачать постер (600x900), баннер (Hero) и логотип.
-            </p>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={gridSearchTerm}
-                onChange={(e) => setGridSearchTerm(e.target.value)}
-                placeholder={appName || 'Название игры...'}
-                className="flex-1 bg-steam-nav text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2 border border-steam-border focus:outline-none focus:border-steam-blue"
-              />
-              <button
-                type="button"
-                onClick={searchSteamGrid}
-                disabled={searchingGrid}
-                className="px-3 py-2 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-xs font-semibold"
-              >
-                {searchingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-
-            {/* Results list */}
-            {gridSearchResults.length > 0 && (
-              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                {gridSearchResults.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => selectGridGame(g.id)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between ${
-                      selectedGameId === g.id
-                        ? 'bg-steam-blue text-white'
-                        : 'bg-steam-nav text-slate-300 hover:bg-steam-cardHover'
-                    }`}
-                  >
-                    <span className="truncate">{g.name}</span>
-                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Selected Posters Preview */}
-            {loadingAssets ? (
-              <div className="py-6 text-center text-xs text-slate-400">
-                <Loader2 className="w-5 h-5 text-steam-blue animate-spin mx-auto mb-2" />
-                Загрузка доступных артов...
-              </div>
-            ) : selectedPoster ? (
-              <div className="space-y-3 pt-2 border-t border-steam-border/60">
-                <div className="text-xs font-semibold text-slate-300">Выбранные обложки:</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="aspect-[2/3] bg-slate-900 rounded-lg overflow-hidden border border-steam-border">
-                    <img src={selectedPoster} alt="Poster" className="w-full h-full object-cover" />
+                      value={appName}
+                      onChange={(e) => setAppName(e.target.value)}
+                      placeholder="Например: Cyberpunk 2077"
+                      required
+                      className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                    />
                   </div>
-                  {selectedHero && (
-                    <div className="aspect-[16/9] bg-slate-900 rounded-lg overflow-hidden border border-steam-border">
-                      <img src={selectedHero} alt="Hero" className="w-full h-full object-cover" />
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Путь к исполняемому файлу (.exe / .sh) *
+                    </label>
+                    <input
+                      type="text"
+                      value={exePath}
+                      onChange={(e) => handleExeChange(e.target.value)}
+                      placeholder="/mnt/game_data/Games/GodOfWar/GoW.exe"
+                      required
+                      className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Рабочая папка (StartDir)
+                      </label>
+                      <input
+                        type="text"
+                        value={startDir}
+                        onChange={(e) => setStartDir(e.target.value)}
+                        placeholder="/mnt/game_data/Games/GodOfWar"
+                        className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Параметры запуска (Launch Options)
+                      </label>
+                      <input
+                        type="text"
+                        value={launchOptions}
+                        onChange={(e) => setLaunchOptions(e.target.value)}
+                        placeholder="Опционально (по умолчанию пусто)"
+                        className="w-full bg-steam-nav text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Proton Version Selection */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Инструмент совместимости Proton
+                    </label>
+                    <select
+                      value={compatTool}
+                      onChange={(e) => setCompatTool(e.target.value)}
+                      className="w-full bg-steam-nav text-slate-100 text-sm rounded-xl px-4 py-2.5 border border-steam-border focus:outline-none focus:border-steam-blue"
+                    >
+                      <option value="proton_experimental">Proton Experimental (По умолчанию)</option>
+                      <option value="GE-Proton9-20">GE-Proton9-20 (Custom GE)</option>
+                      <option value="proton_9">Proton 9.0</option>
+                      <option value="proton_8">Proton 8.0</option>
+                      <option value="proton_hotfix">Proton Hotfix</option>
+                      <option value="Wine-GE-latest">Wine-GE (Native Wine)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={saving || !appName.trim() || !exePath.trim()}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-steam-blue to-blue-600 hover:from-blue-500 hover:to-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Сохранение в shortcuts.vdf и загрузка обложек...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FolderSync className="w-4 h-4" />
+                        <span>Добавить игру в Steam и установить обложки</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* SteamGridDB Artworks Picker Sidebar */}
+              <div className="space-y-6">
+                <div className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-4">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-steam-cyan" />
+                    Обложки SteamGridDB
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Найдите игру по названию, чтобы автоматически скачать постер (600x900), баннер (Hero) и логотип.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={gridSearchTerm}
+                      onChange={(e) => setGridSearchTerm(e.target.value)}
+                      placeholder={appName || 'Название игры...'}
+                      className="flex-1 bg-steam-nav text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2 border border-steam-border focus:outline-none focus:border-steam-blue"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchSteamGrid}
+                      disabled={searchingGrid}
+                      className="px-3 py-2 rounded-xl bg-steam-blue hover:bg-steam-blueHover text-white text-xs font-semibold"
+                    >
+                      {searchingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  {/* Results list */}
+                  {gridSearchResults.length > 0 && (
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {gridSearchResults.map((g) => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => selectGridGame(g.id)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between ${
+                            selectedGameId === g.id
+                              ? 'bg-steam-blue text-white'
+                              : 'bg-steam-nav text-slate-300 hover:bg-steam-cardHover'
+                          }`}
+                        >
+                          <span className="truncate">{g.name}</span>
+                          <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+                        </button>
+                      ))}
                     </div>
                   )}
+
+                  {/* Selected Posters Preview */}
+                  {loadingAssets ? (
+                    <div className="py-6 text-center text-xs text-slate-400">
+                      <Loader2 className="w-5 h-5 text-steam-blue animate-spin mx-auto mb-2" />
+                      Загрузка доступных артов...
+                    </div>
+                  ) : selectedPoster ? (
+                    <div className="space-y-3 pt-2 border-t border-steam-border/60">
+                      <div className="text-xs font-semibold text-slate-300">Выбранные обложки:</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="aspect-[2/3] bg-slate-900 rounded-lg overflow-hidden border border-steam-border">
+                          <img src={selectedPoster} alt="Poster" className="w-full h-full object-cover" />
+                        </div>
+                        {selectedHero && (
+                          <div className="aspect-[16/9] bg-slate-900 rounded-lg overflow-hidden border border-steam-border">
+                            <img src={selectedHero} alt="Hero" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
+            </div>
+          )}
+
+          {/* Existing Non-Steam Shortcuts Section */}
+          <div className="bg-steam-card border border-steam-border/80 rounded-2xl p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <HardDrive className="w-5 h-5 text-slate-400" />
+              Текущие ярлыки в shortcuts.vdf ({shortcuts.length})
+            </h3>
+
+            {loadingShortcuts ? (
+              <div className="py-12 text-center text-slate-400 text-sm">
+                <Loader2 className="w-6 h-6 text-steam-blue animate-spin mx-auto mb-2" />
+                Чтение файла shortcuts.vdf...
+              </div>
+            ) : shortcuts.length === 0 ? (
+              <p className="text-sm text-slate-400 py-6 text-center">
+                Сторонние игры пока не найдены в файле shortcuts.vdf.{isAdmin ? ' Добавьте первую игру через форму выше!' : ''}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-steam-nav text-xs uppercase text-slate-400 font-semibold border-b border-steam-border">
+                    <tr>
+                      <th className="px-4 py-3">Название</th>
+                      <th className="px-4 py-3">Исполняемый файл</th>
+                      <th className="px-4 py-3">Параметры запуска</th>
+                      <th className="px-4 py-3">AppID</th>
+                      <th className="px-4 py-3 text-right">{isAdmin ? 'Действия' : ''}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-steam-border/50">
+                    {shortcuts.map((s, idx) => (
+                      <tr key={idx} className="hover:bg-steam-cardHover/40 transition-colors">
+                        <td className="px-4 py-3.5 font-semibold text-slate-100">{s.AppName}</td>
+                        <td className="px-4 py-3.5 font-mono text-xs text-slate-400 max-w-xs truncate" title={s.Exe}>
+                          {s.Exe}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-xs text-slate-400">
+                          {s.LaunchOptions || '—'}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-xs text-steam-accent">
+                          {s.appid || '—'}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteShortcut(s)}
+                              className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
+                              title="Удалить ярлык из Steam"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Existing Non-Steam Shortcuts Section */}
-      <div className="bg-steam-card border border-steam-border/80 rounded-2xl p-6 shadow-xl">
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <HardDrive className="w-5 h-5 text-slate-400" />
-          Текущие ярлыки в shortcuts.vdf ({shortcuts.length})
-        </h3>
-
-        {loadingShortcuts ? (
-          <div className="py-12 text-center text-slate-400 text-sm">
-            <Loader2 className="w-6 h-6 text-steam-blue animate-spin mx-auto mb-2" />
-            Чтение файла shortcuts.vdf...
-          </div>
-        ) : shortcuts.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center">
-            Сторонние игры пока не найдены в файле shortcuts.vdf. Добавьте первую игру через форму выше!
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="bg-steam-nav text-xs uppercase text-slate-400 font-semibold border-b border-steam-border">
-                <tr>
-                  <th className="px-4 py-3">Название</th>
-                  <th className="px-4 py-3">Исполняемый файл</th>
-                  <th className="px-4 py-3">Параметры запуска</th>
-                  <th className="px-4 py-3">AppID</th>
-                  <th className="px-4 py-3 text-right">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-steam-border/50">
-                {shortcuts.map((s, idx) => (
-                  <tr key={idx} className="hover:bg-steam-cardHover/40 transition-colors">
-                    <td className="px-4 py-3.5 font-semibold text-slate-100">{s.AppName}</td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-slate-400 max-w-xs truncate" title={s.Exe}>
-                      {s.Exe}
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-slate-400">
-                      {s.LaunchOptions || '—'}
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-steam-accent">
-                      {s.appid || '—'}
-                    </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteShortcut(s)}
-                        className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
-                        title="Удалить ярлык из Steam"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-    )}
+      )}
 
       {/* Smart Add to Steam Modal */}
-      {smartModalOpen && typeof document !== 'undefined' && createPortal(
+      {isAdmin && smartModalOpen && typeof document !== 'undefined' && createPortal(
         <div
           onClick={() => setSmartModalOpen(false)}
           className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"

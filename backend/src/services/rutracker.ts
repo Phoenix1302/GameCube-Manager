@@ -92,11 +92,13 @@ export function getRutrackerBaseUrl(): string {
  * Supports per-user cookies with fallback to system settings.
  */
 export function getRutrackerCookieHeader(userId?: number): string {
-  const raw = (
-    userId
-      ? settingsQueries.getUserSetting(userId, 'rutracker_cookie')
-      : settingsQueries.get('rutracker_cookie', '')
-  ).trim();
+  let raw = '';
+  if (userId) {
+    raw = (settingsQueries.getUserSetting(userId, 'rutracker_cookie') || '').trim();
+  }
+  if (!raw) {
+    raw = (settingsQueries.get('rutracker_cookie', '') || '').trim();
+  }
   if (!raw) return '';
 
   // If user pasted pairs like "bb_session=...; cf_clearance=..." or "bb_data=..."
@@ -109,33 +111,92 @@ export function getRutrackerCookieHeader(userId?: number): string {
 }
 
 const DEFAULT_DESKTOP_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
+
+/**
+ * Checks if the given User-Agent string belongs to a real desktop browser.
+ */
+export function isDesktopUserAgent(ua?: string): boolean {
+  if (!ua) return false;
+  const lower = ua.toLowerCase();
+  if (
+    lower.includes('mobile') ||
+    lower.includes('android') ||
+    lower.includes('iphone') ||
+    lower.includes('ipad') ||
+    lower.includes('ipod') ||
+    lower.includes('node') ||
+    lower.includes('axios')
+  ) {
+    return false;
+  }
+  return (
+    lower.includes('mozilla') ||
+    lower.includes('chrome') ||
+    lower.includes('safari') ||
+    lower.includes('firefox') ||
+    lower.includes('edg')
+  );
+}
+
+/**
+ * Saves real desktop user-agent to database for reuse across mobile sessions.
+ */
+export function saveDesktopUserAgentIfApplicable(incomingUa?: string, userId?: number): void {
+  if (isDesktopUserAgent(incomingUa)) {
+    const cleanUa = incomingUa!.trim();
+    if (userId) {
+      settingsQueries.setUserSetting(userId, 'rutracker_user_agent', cleanUa);
+    }
+    settingsQueries.set('rutracker_user_agent', cleanUa);
+  }
+}
 
 /**
  * Common browser headers to avoid anti-bot blocks.
  * Enforces desktop browser User-Agent so Cloudflare cf_clearance validation passes even when browsing from mobile devices.
  */
 export function getBrowserHeaders(extraCookie?: string, customUa?: string, userId?: number) {
+  const baseUrl = getRutrackerBaseUrl();
   const cookie = extraCookie || getRutrackerCookieHeader(userId);
-  let ua =
-    customUa ||
-    (userId
-      ? settingsQueries.getUserSetting(userId, 'rutracker_user_agent')
-      : settingsQueries.get('rutracker_user_agent', ''));
 
-  // If saved UA is empty, invalid, or belongs to a mobile device (iPhone/Android),
-  // always fallback to desktop Chrome UA so desktop cf_clearance cookies do not fail!
-  if (!ua || ua.includes('Mobile') || ua.includes('iPhone') || ua.includes('Android') || ua.includes('node') || ua.includes('axios')) {
+  // If custom incoming UA is desktop, auto-save it for subsequent mobile sessions
+  if (isDesktopUserAgent(customUa)) {
+    saveDesktopUserAgentIfApplicable(customUa, userId);
+  }
+
+  // Priority for User-Agent:
+  // 1. Valid desktop incoming UA
+  // 2. Saved user desktop UA
+  // 3. Saved global desktop UA
+  // 4. Fallback DEFAULT_DESKTOP_UA
+  let ua = '';
+  if (isDesktopUserAgent(customUa)) {
+    ua = customUa!.trim();
+  } else if (userId && isDesktopUserAgent(settingsQueries.getUserSetting(userId, 'rutracker_user_agent'))) {
+    ua = settingsQueries.getUserSetting(userId, 'rutracker_user_agent').trim();
+  } else if (isDesktopUserAgent(settingsQueries.get('rutracker_user_agent', ''))) {
+    ua = settingsQueries.get('rutracker_user_agent', '').trim();
+  }
+
+  if (!ua) {
     ua = DEFAULT_DESKTOP_UA;
   }
 
   return {
     'User-Agent': ua,
     'Accept':
-      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'ru,en;q=0.9,en-US;q=0.8',
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
+    'Referer': `${baseUrl}/forum/index.php`,
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
     ...(cookie ? { Cookie: cookie } : {}),
   };
 }
@@ -155,11 +216,13 @@ export function cleanGameTitleForSearch(title: string): string {
  * Checks if RuTracker integration has credentials or cookies configured.
  */
 export function isRutrackerConfigured(userId?: number): boolean {
-  const cookie = (
-    userId
-      ? settingsQueries.getUserSetting(userId, 'rutracker_cookie')
-      : settingsQueries.get('rutracker_cookie', '')
-  ).trim();
+  let cookie = '';
+  if (userId) {
+    cookie = (settingsQueries.getUserSetting(userId, 'rutracker_cookie') || '').trim();
+  }
+  if (!cookie) {
+    cookie = (settingsQueries.get('rutracker_cookie', '') || '').trim();
+  }
   const login = settingsQueries.get('rutracker_login', '').trim();
   return cookie.length > 0 || login.length > 0;
 }
@@ -168,7 +231,7 @@ export function isRutrackerConfigured(userId?: number): boolean {
  * Search RuTracker for game releases.
  * Parses topic id, title, category, size, seeds, leechers, and date.
  */
-export async function searchRutracker(query: string, userId?: number): Promise<RutrackerSearchResult> {
+export async function searchRutracker(query: string, userId?: number, incomingUa?: string): Promise<RutrackerSearchResult> {
   const cleanQ = cleanGameTitleForSearch(query);
   if (!cleanQ) {
     return { configured: true, query, total: 0, releases: [] };
@@ -193,7 +256,7 @@ export async function searchRutracker(query: string, userId?: number): Promise<R
     const response = await axios.get(searchUrl, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: getBrowserHeaders(cookie, undefined, userId),
+      headers: getBrowserHeaders(cookie, incomingUa, userId),
     });
 
     const html = new TextDecoder('windows-1251').decode(response.data);
@@ -410,7 +473,7 @@ export function buildMagnetUri(btih: string, title?: string): string {
  * Resolves a Magnet link for a given topicId.
  * First tries scraping viewtopic.php; falls back to computing SHA-1 from .torrent buffer.
  */
-export async function getRutrackerMagnet(topicId: number, title?: string, userId?: number): Promise<string> {
+export async function getRutrackerMagnet(topicId: number, title?: string, userId?: number, incomingUa?: string): Promise<string> {
   const cookie = getRutrackerCookieHeader(userId);
   const baseUrl = getRutrackerBaseUrl();
 
@@ -419,7 +482,7 @@ export async function getRutrackerMagnet(topicId: number, title?: string, userId
     const topicRes = await axios.get(`${baseUrl}/forum/viewtopic.php?t=${topicId}`, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: getBrowserHeaders(cookie, undefined, userId),
+      headers: getBrowserHeaders(cookie, incomingUa, userId),
     });
 
     const html = new TextDecoder('windows-1251').decode(topicRes.data);
@@ -456,7 +519,7 @@ export async function getRutrackerMagnet(topicId: number, title?: string, userId
     responseType: 'arraybuffer',
     timeout: 10000,
     headers: {
-      ...getBrowserHeaders(cookie, undefined, userId),
+      ...getBrowserHeaders(cookie, incomingUa, userId),
       Referer: `${baseUrl}/forum/viewtopic.php?t=${topicId}`,
     },
   });
@@ -481,7 +544,8 @@ export async function downloadTorrentToQBit(
   topicId: number,
   savePath?: string,
   requestedMode?: 'magnet' | 'torrent' | 'auto',
-  userId?: number
+  userId?: number,
+  incomingUa?: string
 ): Promise<{ success: boolean; message: string; mode: string; magnet?: string }> {
   const preferredMode = !requestedMode || requestedMode === 'auto'
     ? (userId ? settingsQueries.getUserSetting(userId, 'rutracker_download_mode', 'magnet') : settingsQueries.get('rutracker_download_mode', 'magnet'))
@@ -492,7 +556,7 @@ export async function downloadTorrentToQBit(
   // Mode A: Magnet link (fast, direct, doesn't consume tracker download limits)
   if (preferredMode === 'magnet') {
     try {
-      const magnet = await getRutrackerMagnet(topicId, undefined, userId);
+      const magnet = await getRutrackerMagnet(topicId, undefined, userId, incomingUa);
       const params = new URLSearchParams();
       params.append('urls', magnet);
       if (savePath) {
@@ -533,7 +597,7 @@ export async function downloadTorrentToQBit(
     responseType: 'arraybuffer',
     timeout: 10000,
     headers: {
-      ...getBrowserHeaders(cookie, undefined, userId),
+      ...getBrowserHeaders(cookie, incomingUa, userId),
       Referer: `${baseUrl}/forum/viewtopic.php?t=${topicId}`,
     },
   });

@@ -6,7 +6,7 @@ import axios from 'axios';
 import { pipeline } from 'stream/promises';
 import { settingsQueries } from '../db/index.js';
 import { config } from '../config.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 import {
   parseBinaryVdf,
   serializeBinaryVdf,
@@ -1410,15 +1410,6 @@ const GAMECUBE_HELPER_SCRIPT_CONTENT = `#!/usr/bin/env bash
 
 set -uo pipefail
 
-# 0. Auto-elevate to root if invoked by unprivileged user (e.g. Steam client)
-if [ "$(id -u)" -ne 0 ]; then
-    if command -v sudo >/dev/null 2>&1; then
-        exec sudo "$0" "$@"
-    else
-        echo "[GameCube-Session] Error: Root permissions required." >&2
-        exit 1
-    fi
-fi
 
 ACTION="\${1:-restart}"
 echo "[GameCube-Session] Requested action: \${ACTION}"
@@ -1462,11 +1453,25 @@ export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/\${ACTIVE_UID}/bus"
 
 echo "[GameCube-Session] Target desktop user: \${ACTIVE_USER} (UID: \${ACTIVE_UID})"
 
+can_sudo() {
+    command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null
+}
+
+# Helper to run commands cleanly as the desktop user (works in rootless podman and on host)
+run_as_user() {
+    env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" "$@" 2>/dev/null && return 0
+    if [ "$(id -u)" -eq 0 ] && command -v sudo >/dev/null 2>&1; then
+        sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" "$@" 2>/dev/null && return 0
+    fi
+    if command -v runuser >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+        runuser -u "$ACTIVE_USER" -- env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" "$@" 2>/dev/null && return 0
+    fi
+    env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" "$@" 2>/dev/null || true
+}
+
 # Helper to run systemctl --user commands cleanly for the target user
 user_systemctl() {
-    sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" systemctl --user "$@" 2>/dev/null \\
-    || systemctl --machine="\${ACTIVE_USER}@.host" --user "$@" 2>/dev/null \\
-    || true
+    run_as_user systemctl --user "$@"
 }
 
 # 2. Detect available session .desktop files
@@ -1503,13 +1508,13 @@ set_autologin_session() {
     echo "[GameCube-Session] Configuring autologin for session: \${target_session}..."
 
     # Clean up legacy / conflicting drop-ins that break desktop switching
-    rm -f /etc/sddm.conf.d/zz-gamecube-session.conf 2>/dev/null || true
-    rm -f /etc/plasmalogin.conf.d/zz-gamecube-session.conf 2>/dev/null || true
+    rm -f /etc/sddm.conf.d/zz-gamecube-session.conf 2>/dev/null || sudo rm -f /etc/sddm.conf.d/zz-gamecube-session.conf 2>/dev/null || true
+    rm -f /etc/plasmalogin.conf.d/zz-gamecube-session.conf 2>/dev/null || sudo rm -f /etc/plasmalogin.conf.d/zz-gamecube-session.conf 2>/dev/null || true
 
     # A. Plasma Login Manager (/etc/plasmalogin.conf.d/)
     if [ -d "/etc/plasmalogin.conf.d" ] || command -v plasmalogin >/dev/null 2>&1 || systemctl is-active --quiet plasmalogin.service 2>/dev/null; then
-        mkdir -p "/etc/plasmalogin.conf.d" 2>/dev/null || true
-        cat << EOF > /etc/plasmalogin.conf.d/autologin.conf 2>/dev/null || true
+        mkdir -p "/etc/plasmalogin.conf.d" 2>/dev/null || sudo mkdir -p "/etc/plasmalogin.conf.d" 2>/dev/null || true
+        cat << EOF > /etc/plasmalogin.conf.d/autologin.conf 2>/dev/null || printf "[Autologin]\\nUser=\${ACTIVE_USER}\\nSession=\${target_session}\\n" | sudo tee /etc/plasmalogin.conf.d/autologin.conf >/dev/null 2>&1 || true
 [Autologin]
 User=\${ACTIVE_USER}
 Session=\${target_session}
@@ -1519,8 +1524,8 @@ EOF
 
     # B. SDDM (/etc/sddm.conf.d/)
     if [ -d "/etc/sddm.conf.d" ] || command -v sddm >/dev/null 2>&1 || systemctl is-active --quiet sddm.service 2>/dev/null; then
-        mkdir -p "/etc/sddm.conf.d" 2>/dev/null || true
-        cat << EOF > /etc/sddm.conf.d/autologin.conf 2>/dev/null || true
+        mkdir -p "/etc/sddm.conf.d" 2>/dev/null || sudo mkdir -p "/etc/sddm.conf.d" 2>/dev/null || true
+        cat << EOF > /etc/sddm.conf.d/autologin.conf 2>/dev/null || printf "[Autologin]\\nUser=\${ACTIVE_USER}\\nSession=\${target_session}\\nRelogin=true\\n" | sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null 2>&1 || true
 [Autologin]
 User=\${ACTIVE_USER}
 Session=\${target_session}
@@ -1533,7 +1538,7 @@ EOF
     if [ -d "/var/lib/sddm" ]; then
         local sess_path="/usr/share/wayland-sessions/\${target_session}"
         [ ! -f "$sess_path" ] && sess_path="/usr/share/xsessions/\${target_session}"
-        cat << EOF > /var/lib/sddm/state.conf 2>/dev/null || true
+        cat << EOF > /var/lib/sddm/state.conf 2>/dev/null || printf "[Last]\\nSession=\${sess_path}\\nUser=\${ACTIVE_USER}\\n" | sudo tee /var/lib/sddm/state.conf >/dev/null 2>&1 || true
 [Last]
 Session=\${sess_path}
 User=\${ACTIVE_USER}
@@ -1553,7 +1558,7 @@ case "$ACTION" in
         user_systemctl stop gamescope-session.service
 
         # Graceful shutdown of Steam client
-        sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" steam -shutdown 2>/dev/null || true
+        run_as_user steam -shutdown
         sleep 1
 
         # If gamescope process is still lingering, terminate gently
@@ -1561,9 +1566,9 @@ case "$ACTION" in
 
         # Trigger display manager to pick up new desktop session immediately
         if systemctl is-active --quiet plasmalogin.service 2>/dev/null; then
-            systemctl restart plasmalogin.service 2>/dev/null || true
+            systemctl restart plasmalogin.service 2>/dev/null || sudo systemctl restart plasmalogin.service 2>/dev/null || true
         elif systemctl is-active --quiet sddm.service 2>/dev/null; then
-            systemctl restart sddm.service 2>/dev/null || true
+            systemctl restart sddm.service 2>/dev/null || sudo systemctl restart sddm.service 2>/dev/null || true
         fi
         ;;
 
@@ -1573,7 +1578,7 @@ case "$ACTION" in
         set_autologin_session "\${GAMESCOPE_SESSION}"
 
         # Close Plasma session gracefully via DBus
-        sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" qdbus org.kde.Shutdown /Shutdown logout 2>/dev/null || true
+        run_as_user qdbus org.kde.Shutdown /Shutdown logout
         sleep 1
 
         # Fallback termination of plasma if still alive
@@ -1585,9 +1590,9 @@ case "$ACTION" in
 
         # Trigger display manager
         if systemctl is-active --quiet plasmalogin.service 2>/dev/null; then
-            systemctl restart plasmalogin.service 2>/dev/null || true
+            systemctl restart plasmalogin.service 2>/dev/null || sudo systemctl restart plasmalogin.service 2>/dev/null || true
         elif systemctl is-active --quiet sddm.service 2>/dev/null; then
-            systemctl restart sddm.service 2>/dev/null || true
+            systemctl restart sddm.service 2>/dev/null || sudo systemctl restart sddm.service 2>/dev/null || true
         fi
         ;;
 
@@ -1599,14 +1604,14 @@ case "$ACTION" in
         RESTARTED=false
 
         # A. Priority: Restart gamescope-session-plus@steam.service (Fedora 44 / Bazzite / ChimeraOS)
-        if user_systemctl is-active --quiet gamescope-session-plus@steam.service; then
+        if run_as_user systemctl --user is-active --quiet gamescope-session-plus@steam.service; then
             echo "[GameCube-Session] Restarting systemd user service: gamescope-session-plus@steam.service..."
             user_systemctl restart gamescope-session-plus@steam.service
             RESTARTED=true
         fi
 
         # B. Fallback: Restart standard gamescope-session.service
-        if [ "$RESTARTED" = false ] && user_systemctl is-active --quiet gamescope-session.service; then
+        if [ "$RESTARTED" = false ] && run_as_user systemctl --user is-active --quiet gamescope-session.service; then
             echo "[GameCube-Session] Restarting systemd user service: gamescope-session.service..."
             user_systemctl restart gamescope-session.service
             RESTARTED=true
@@ -1615,7 +1620,7 @@ case "$ACTION" in
         # C. Fallback: Signal Steam client cleanly
         if [ "$RESTARTED" = false ]; then
             echo "[GameCube-Session] Restarting Steam client cleanly inside compositor..."
-            sudo -u "$ACTIVE_USER" env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" steam -shutdown 2>/dev/null || true
+            run_as_user steam -shutdown
             sleep 2
             pkill -u "$ACTIVE_UID" -x steam 2>/dev/null || true
         fi
@@ -1766,7 +1771,7 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
       try {
         console.log(`[Steam] Executing primary seamless helper: ${hostPath} restart`);
         const out = execSync(
-          `chroot /host_root ${hostPath} restart 2>&1 || chroot /host_root runuser -u ${activeUser} -- ${hostPath} restart 2>&1 || true`,
+          `chroot /host_root env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus ${hostPath} restart 2>&1 || chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus ${hostPath} restart 2>&1 || true`,
           { timeout: 8000 }
         ).toString();
         console.log(`[Steam] Helper output:\n${out.trim()}`);
@@ -1809,9 +1814,10 @@ export function reloadSteamGameMode(): { success: boolean; methods: string[]; me
   try {
     console.log(`[Steam] Restarting gamescope session via systemd --user for ${activeUser}...`);
     execSync(
-      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-plus@steam 2>/dev/null || ` +
-      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session 2>/dev/null || ` +
-      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-steam 2>/dev/null || true`,
+      `chroot /host_root env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-plus@steam 2>/dev/null || ` +
+      `chroot /host_root env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session 2>/dev/null || ` +
+      `chroot /host_root env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-steam 2>/dev/null || ` +
+      `chroot /host_root runuser -u ${activeUser} -- env XDG_RUNTIME_DIR=/run/user/${activeUid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${activeUid}/bus systemctl --user restart gamescope-session-plus@steam 2>/dev/null || true`,
       { timeout: 4000, stdio: 'ignore' }
     );
     executed.push('systemctl --user restart gamescope-session');
@@ -1848,6 +1854,13 @@ export function isSafeGameFolderToDelete(targetPath: string): { safe: boolean; r
   }
 
   const clean = toCleanPath(targetPath.trim().replace(/^["]+|["]+$/g, ''));
+  const cleanLower = clean.toLowerCase();
+
+  // Forbid deleting games and folders inside official Steam libraries
+  if (cleanLower.includes('steamlibrary') || cleanLower.includes('steamapps/common') || cleanLower.includes('.local/share/steam')) {
+    return { safe: false, reason: 'Удаление официальных игр или файлов из директории Steam Library запрещено' };
+  }
+
   const internal = toInternalPath(clean);
 
   // Normalize path
@@ -1989,8 +2002,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Add or update shortcut
-  fastify.post('/shortcuts', async (request, reply) => {
+  // Add or update shortcut (Admin only)
+  fastify.post('/shortcuts', { preHandler: [requireAdmin] }, async (request, reply) => {
     const {
       appName,
       exe,
@@ -2119,8 +2132,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos)
-  fastify.post('/shortcuts/auto-create', async (request, reply) => {
+  // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos) (Admin only)
+  fastify.post('/shortcuts/auto-create', { preHandler: [requireAdmin] }, async (request, reply) => {
     const {
       appName,
       gamePath,
@@ -2183,8 +2196,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Delete shortcut from shortcuts.vdf across all user directories (with optional disk deletion)
-  fastify.delete('/shortcuts/:appId', async (request, reply) => {
+  // Delete shortcut from shortcuts.vdf across all user directories (with optional disk deletion) (Admin only)
+  fastify.delete('/shortcuts/:appId', { preHandler: [requireAdmin] }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     const { deleteFiles, gamePath } = request.query as { deleteFiles?: string; gamePath?: string };
     const shouldDeleteFiles = deleteFiles === 'true' || deleteFiles === '1';
@@ -2276,8 +2289,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     return { message: `Ярлык и обложки успешно удалены из Steam${diskMessage}`, appId: targetId };
   });
 
-  // Delete non-Steam local game folder directly from disk
-  fastify.post('/delete-local-game', async (request, reply) => {
+  // Delete non-Steam local game folder directly from disk (Admin only)
+  fastify.post('/delete-local-game', { preHandler: [requireAdmin] }, async (request, reply) => {
     const { path: rawPath, removeShortcuts = true } = request.body as {
       path: string;
       removeShortcuts?: boolean;
@@ -2362,8 +2375,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Restart Steam client on host to reload shortcuts and artworks in Game Mode
-  fastify.post('/restart-steam', async (request, reply) => {
+  // Restart Steam client on host to reload shortcuts and artworks in Game Mode (Admin only)
+  fastify.post('/restart-steam', { preHandler: [requireAdmin] }, async (request, reply) => {
     try {
       console.log('[Steam] Triggering compositor-safe Game Mode reload...');
       const result = reloadSteamGameMode();

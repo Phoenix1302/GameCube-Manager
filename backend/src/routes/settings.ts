@@ -7,6 +7,7 @@ import {
   cleanImageCache,
   cleanEntireCache,
 } from '../services/imageCache.js';
+import { isDesktopUserAgent } from '../services/rutracker.js';
 
 export async function settingsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', authenticate);
@@ -19,14 +20,14 @@ export async function settingsRoutes(fastify: FastifyInstance) {
       return { settings };
     }
 
-    // Regular users: return public & per-user settings
+    // Regular users: return public & per-user settings (with fallback to global defaults)
     const userSettings = settingsQueries.getUserSettings(user.id);
     return {
       settings: {
-        rutracker_url: userSettings.rutracker_url || 'https://rutracker.org',
-        rutracker_cookie: userSettings.rutracker_cookie || '',
-        rutracker_download_mode: userSettings.rutracker_download_mode || 'magnet',
-        rutracker_user_agent: userSettings.rutracker_user_agent || '',
+        rutracker_url: userSettings.rutracker_url || settingsQueries.get('rutracker_url', 'https://rutracker.org'),
+        rutracker_cookie: userSettings.rutracker_cookie || settingsQueries.get('rutracker_cookie', ''),
+        rutracker_download_mode: userSettings.rutracker_download_mode || settingsQueries.get('rutracker_download_mode', 'magnet'),
+        rutracker_user_agent: userSettings.rutracker_user_agent || settingsQueries.get('rutracker_user_agent', ''),
         qbittorrent_url: 'http://127.0.0.1:8085',
       },
     };
@@ -66,6 +67,17 @@ export async function settingsRoutes(fastify: FastifyInstance) {
   fastify.post('/', async (request) => {
     const user = getAuthUser(request);
     const body = request.body as Record<string, string>;
+    const incomingUa = request.headers['user-agent'];
+
+    // Auto-capture desktop user-agent if saving cookies and user-agent was not explicitly typed
+    if (isDesktopUserAgent(incomingUa) && !body.rutracker_user_agent) {
+      if (user.role === 'admin' && !settingsQueries.get('rutracker_user_agent', '')) {
+        settingsQueries.set('rutracker_user_agent', incomingUa!.trim());
+      }
+      if (!settingsQueries.getUserSetting(user.id, 'rutracker_user_agent')) {
+        settingsQueries.setUserSetting(user.id, 'rutracker_user_agent', incomingUa!.trim());
+      }
+    }
 
     if (user.role === 'admin') {
       for (const [key, value] of Object.entries(body)) {
