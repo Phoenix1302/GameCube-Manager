@@ -2,7 +2,7 @@
 FROM docker.io/library/node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
@@ -14,7 +14,7 @@ RUN apk add --no-cache python3 make g++ bash curl
 
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
-RUN npm install
+RUN npm install --no-audit --no-fund
 
 COPY backend/ ./
 RUN npm run build
