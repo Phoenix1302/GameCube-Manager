@@ -6,7 +6,7 @@ import axios from 'axios';
 import { pipeline } from 'stream/promises';
 import { settingsQueries } from '../db/index.js';
 import { config } from '../config.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import {
   parseBinaryVdf,
   serializeBinaryVdf,
@@ -1857,9 +1857,24 @@ export function isSafeGameFolderToDelete(targetPath: string): { safe: boolean; r
   const cleanLower = clean.toLowerCase();
 
   // Forbid deleting games and folders inside official Steam libraries
-  if (cleanLower.includes('steamlibrary') || cleanLower.includes('steamapps/common') || cleanLower.includes('.local/share/steam')) {
+  if (
+    cleanLower.includes('steamlibrary') ||
+    cleanLower.includes('steamapps') ||
+    cleanLower.includes('.local/share/steam') ||
+    cleanLower.includes('steam/steamapps')
+  ) {
     return { safe: false, reason: 'Удаление официальных игр или файлов из директории Steam Library запрещено' };
   }
+
+  try {
+    const steamLibs = findSteamLibraryFolders();
+    for (const lib of steamLibs) {
+      const libClean = toCleanPath(lib).toLowerCase();
+      if (cleanLower === libClean || cleanLower.startsWith(libClean + '/')) {
+        return { safe: false, reason: 'Удаление официальных игр или файлов из директории Steam Library запрещено' };
+      }
+    }
+  } catch {}
 
   const internal = toInternalPath(clean);
 
@@ -2002,8 +2017,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Add or update shortcut (Admin only)
-  fastify.post('/shortcuts', { preHandler: [requireAdmin] }, async (request, reply) => {
+  // Add or update shortcut
+  fastify.post('/shortcuts', async (request, reply) => {
     const {
       appName,
       exe,
@@ -2132,8 +2147,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos) (Admin only)
-  fastify.post('/shortcuts/auto-create', { preHandler: [requireAdmin] }, async (request, reply) => {
+  // 1-Click Auto Add Shortcut With Artwork (Posters, Banners, Heroes, Logos)
+  fastify.post('/shortcuts/auto-create', async (request, reply) => {
     const {
       appName,
       gamePath,
@@ -2196,8 +2211,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Delete shortcut from shortcuts.vdf across all user directories (with optional disk deletion) (Admin only)
-  fastify.delete('/shortcuts/:appId', { preHandler: [requireAdmin] }, async (request, reply) => {
+  // Delete shortcut from shortcuts.vdf across all user directories (with optional disk deletion)
+  fastify.delete('/shortcuts/:appId', async (request, reply) => {
     const { appId } = request.params as { appId: string };
     const { deleteFiles, gamePath } = request.query as { deleteFiles?: string; gamePath?: string };
     const shouldDeleteFiles = deleteFiles === 'true' || deleteFiles === '1';
@@ -2289,8 +2304,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     return { message: `Ярлык и обложки успешно удалены из Steam${diskMessage}`, appId: targetId };
   });
 
-  // Delete non-Steam local game folder directly from disk (Admin only)
-  fastify.post('/delete-local-game', { preHandler: [requireAdmin] }, async (request, reply) => {
+  // Delete non-Steam local game folder directly from disk
+  fastify.post('/delete-local-game', async (request, reply) => {
     const { path: rawPath, removeShortcuts = true } = request.body as {
       path: string;
       removeShortcuts?: boolean;
@@ -2375,8 +2390,8 @@ export async function steamRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Restart Steam client on host to reload shortcuts and artworks in Game Mode (Admin only)
-  fastify.post('/restart-steam', { preHandler: [requireAdmin] }, async (request, reply) => {
+  // Restart Steam client on host to reload shortcuts and artworks in Game Mode
+  fastify.post('/restart-steam', async (request, reply) => {
     try {
       console.log('[Steam] Triggering compositor-safe Game Mode reload...');
       const result = reloadSteamGameMode();

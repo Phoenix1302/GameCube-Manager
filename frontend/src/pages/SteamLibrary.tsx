@@ -151,14 +151,6 @@ export const SteamLibrary: React.FC = () => {
 
   const [restartingSteam, setRestartingSteam] = useState(false);
   const handleRestartSteam = async () => {
-    if (!isAdmin) {
-      await alert({
-        title: 'Доступ ограничен',
-        message: 'Перезапуск Steam доступен только администратору.',
-        variant: 'warning',
-      });
-      return;
-    }
     try {
       setRestartingSteam(true);
       const res = await api.post('/steam/restart-steam');
@@ -244,14 +236,6 @@ export const SteamLibrary: React.FC = () => {
 
   const handleSaveToSteam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) {
-      await alert({
-        title: 'Доступ ограничен',
-        message: 'Добавление игр в Steam доступно только администраторам.',
-        variant: 'warning',
-      });
-      return;
-    }
     if (!appName.trim() || !exePath.trim()) {
       await alert({
         title: 'Внимание',
@@ -446,14 +430,6 @@ export const SteamLibrary: React.FC = () => {
 
   const handleSmartAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) {
-      await alert({
-        title: 'Доступ ограничен',
-        message: 'Добавление игр в Steam доступно только администраторам.',
-        variant: 'warning',
-      });
-      return;
-    }
     if (!modalAppName.trim() || !modalSelectedExe.trim()) {
       await alert({
         title: 'Внимание',
@@ -507,23 +483,18 @@ export const SteamLibrary: React.FC = () => {
   };
 
   const handleDeleteShortcut = async (s: SteamShortcut) => {
-    if (!isAdmin) {
-      await alert({
-        title: 'Доступ ограничен',
-        message: 'Удаление ярлыков Steam доступно только администратору.',
-        variant: 'warning',
-      });
-      return;
-    }
     if (!s.appid) return;
     const cleanPath = (s.StartDir || s.Exe || '').replace(/^["]+|["]+$/g, '');
+    const cleanLower = cleanPath.toLowerCase();
+    const isProtected = cleanLower.includes('steamlibrary') || cleanLower.includes('steamapps') || cleanLower.includes('.local/share/steam');
+
     const res = await confirm({
       title: 'Удаление ярлыка Steam',
       message: `Удалить ярлык «${s.AppName || s.appid}» из библиотеки Steam?`,
       confirmText: 'Удалить ярлык',
       cancelText: 'Отмена',
       variant: 'danger',
-      showCheckbox: !!cleanPath,
+      showCheckbox: !!cleanPath && !isProtected,
       checkboxLabel: `Также удалить папку игры с диска (${cleanPath})`,
     });
     if (!res.confirmed) return;
@@ -549,14 +520,16 @@ export const SteamLibrary: React.FC = () => {
   };
 
   const handleDeleteLocalGame = async (game: any) => {
-    if (!isAdmin) {
+    const pathCheck = (game.fullPath || game.displayPath || '').toLowerCase();
+    if (game.isOfficialSteam || pathCheck.includes('steamlibrary') || pathCheck.includes('steamapps') || pathCheck.includes('.local/share/steam')) {
       await alert({
-        title: 'Доступ ограничен',
-        message: 'Удаление игр доступно только администраторам.',
+        title: 'Действие запрещено',
+        message: 'Удаление официальных игр Steam из библиотеки запрещено.',
         variant: 'warning',
       });
       return;
     }
+
     const res = await confirm({
       title: 'Удаление сторонней игры',
       message: `Вы действительно хотите полностью удалить стороннюю игру «${game.name}» с накопителя?\n\nКаталог: ${game.displayPath}\nВсе файлы игры будут удалены безвозвратно.`,
@@ -643,29 +616,27 @@ export const SteamLibrary: React.FC = () => {
             </p>
           </div>
 
-          {isAdmin && (
-            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={handleRestartSteam}
-                disabled={restartingSteam}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover border border-steam-border text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-md disabled:opacity-50 whitespace-nowrap"
-                title="Перезапустить клиент Steam или обновить Game Mode, чтобы применить новые ярлыки и обложки"
-              >
-                <RotateCcw className={`w-4 h-4 text-steam-accent ${restartingSteam ? 'animate-spin' : ''}`} />
-                <span>{restartingSteam ? 'Применение...' : 'Применить в SteamOS'}</span>
-              </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={handleRestartSteam}
+              disabled={restartingSteam}
+              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-steam-card hover:bg-steam-cardHover border border-steam-border text-slate-200 hover:text-white text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-md disabled:opacity-50 whitespace-nowrap"
+              title="Перезапустить клиент Steam или обновить Game Mode, чтобы применить новые ярлыки и обложки"
+            >
+              <RotateCcw className={`w-4 h-4 text-steam-accent ${restartingSteam ? 'animate-spin' : ''}`} />
+              <span>{restartingSteam ? 'Применение...' : 'Применить в SteamOS'}</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => openSmartModal()}
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Добавить стороннюю игру</span>
-              </button>
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => openSmartModal()}
+              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-steam-blue to-steam-cyan hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-bold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Добавить стороннюю игру</span>
+            </button>
+          </div>
         </div>
 
         {/* Row 2: Clean Storage Filters Bar */}
@@ -901,7 +872,15 @@ export const SteamLibrary: React.FC = () => {
                       </button>
                     )}
 
-                    {isAdmin && (() => {
+                    {game.isOfficialSteam ? (
+                      <div
+                        className="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-steam-nav/70 text-slate-400 border border-steam-border/60 select-none"
+                        title="Официальная игра Steam"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-steam-blue" />
+                        <span>Игра Steam</span>
+                      </div>
+                    ) : (() => {
                       const alreadyInSteam = isGameInSteam(game);
                       return (
                         <button
@@ -936,9 +915,9 @@ export const SteamLibrary: React.FC = () => {
                     {(() => {
                       const isSteamLib =
                         game.isOfficialSteam ||
-                        (game.libraryPath && game.libraryPath.toLowerCase().includes('steamlibrary')) ||
-                        (game.displayPath && game.displayPath.toLowerCase().includes('steamlibrary'));
-                      if (!isAdmin || isSteamLib) return null;
+                        (game.libraryPath && (game.libraryPath.toLowerCase().includes('steamlibrary') || game.libraryPath.toLowerCase().includes('steamapps'))) ||
+                        (game.displayPath && (game.displayPath.toLowerCase().includes('steamlibrary') || game.displayPath.toLowerCase().includes('steamapps')));
+                      if (isSteamLib) return null;
                       return (
                         <button
                           type="button"
@@ -961,9 +940,8 @@ export const SteamLibrary: React.FC = () => {
       {/* TAB 2: NON-STEAM SHORTCUTS WIZARD & TABLE */}
       {activeTab === 'shortcuts' && (
         <div className="space-y-8">
-          {/* Main Wizard Form - Admin Only */}
-          {isAdmin && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+          {/* Main Wizard Form */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
               <div className="lg:col-span-2 space-y-6">
                 <form onSubmit={handleSaveToSteam} className="p-6 rounded-2xl bg-steam-card border border-steam-border/80 shadow-xl space-y-5">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1140,7 +1118,6 @@ export const SteamLibrary: React.FC = () => {
                 </div>
               </div>
             </div>
-          )}
 
           {/* Existing Non-Steam Shortcuts Section */}
           <div className="bg-steam-card border border-steam-border/80 rounded-2xl p-6 shadow-xl">
@@ -1167,7 +1144,7 @@ export const SteamLibrary: React.FC = () => {
                       <th className="px-4 py-3">Исполняемый файл</th>
                       <th className="px-4 py-3">Параметры запуска</th>
                       <th className="px-4 py-3">AppID</th>
-                      <th className="px-4 py-3 text-right">{isAdmin ? 'Действия' : ''}</th>
+                      <th className="px-4 py-3 text-right">Действия</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-steam-border/50">
@@ -1184,16 +1161,14 @@ export const SteamLibrary: React.FC = () => {
                           {s.appid || '—'}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteShortcut(s)}
-                              className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
-                              title="Удалить ярлык из Steam"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShortcut(s)}
+                            className="p-1.5 rounded-lg bg-steam-nav hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-steam-border transition-colors cursor-pointer"
+                            title="Удалить ярлык из Steam"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1206,7 +1181,7 @@ export const SteamLibrary: React.FC = () => {
       )}
 
       {/* Smart Add to Steam Modal */}
-      {isAdmin && smartModalOpen && typeof document !== 'undefined' && createPortal(
+      {smartModalOpen && typeof document !== 'undefined' && createPortal(
         <div
           onClick={() => setSmartModalOpen(false)}
           className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
