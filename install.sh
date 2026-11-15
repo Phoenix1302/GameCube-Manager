@@ -26,8 +26,50 @@ echo "  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═�
 echo -e "                   Steam Machine Control Center v1.1.1${NC}\n"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CURRENT_USER="$(whoami)"
-USER_HOME="${HOME:-/home/${CURRENT_USER}}"
+
+# Detect the target non-root desktop user (even if run via sudo)
+CURRENT_USER="${SUDO_USER:-}"
+if [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
+    CURRENT_USER="$(whoami)"
+fi
+if [ "$CURRENT_USER" = "root" ]; then
+    CURRENT_USER=$(who 2>/dev/null | awk '{print $1}' | head -n1 || true)
+fi
+if [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
+    if [ -d "/home/gamecube" ]; then
+        CURRENT_USER="gamecube"
+    elif [ -d "/home/deck" ]; then
+        CURRENT_USER="deck"
+    else
+        CURRENT_USER=$(ls -1 /home 2>/dev/null | head -n1 || echo "gamecube")
+    fi
+fi
+
+TARGET_UID="$(id -u "$CURRENT_USER" 2>/dev/null || echo "1000")"
+USER_HOME="$(eval echo "~$CURRENT_USER")"
+
+# Clean up any accidental root-level quadlets that cause port conflicts
+if [ -d "/root/.config/containers/systemd" ]; then
+    rm -f /root/.config/containers/systemd/gamecube* 2>/dev/null || true
+fi
+
+user_cmd() {
+    if [ "$(id -u)" -eq 0 ] && [ "$CURRENT_USER" != "root" ]; then
+        sudo -u "$CURRENT_USER" env HOME="$USER_HOME" XDG_RUNTIME_DIR="/run/user/${TARGET_UID}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${TARGET_UID}/bus" "$@"
+    else
+        "$@"
+    fi
+}
+
+user_systemctl() {
+    if [ "$(id -u)" -eq 0 ] && [ "$CURRENT_USER" != "root" ]; then
+        sudo -u "$CURRENT_USER" env HOME="$USER_HOME" XDG_RUNTIME_DIR="/run/user/${TARGET_UID}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${TARGET_UID}/bus" systemctl --user "$@" 2>/dev/null \
+        || systemctl --machine="${CURRENT_USER}@.host" --user "$@" 2>/dev/null \
+        || true
+    else
+        systemctl --user "$@" 2>/dev/null || true
+    fi
+}
 
 # 1. Prerequisites Check
 echo -e "${BLUE}==>${NC} ${BOLD}1. Checking prerequisites...${NC}"
@@ -217,13 +259,13 @@ echo -e "\n${BLUE}==>${NC} ${BOLD}5. Building container images...${NC}"
 cd "$SCRIPT_DIR"
 
 echo -e "    - Building ${BOLD}gamecube-manager:1.1.1${NC} (Frontend + Backend)..."
-podman build -t localhost/gamecube-manager:1.1.1 .
+user_cmd podman build -t localhost/gamecube-manager:1.1.1 .
 
 echo -e "    - Building ${BOLD}gamecube-torrent:1.1.1${NC} (Headless qBittorrent)..."
-podman build -t localhost/gamecube-torrent:1.1.1 deploy/qbittorrent
+user_cmd podman build -t localhost/gamecube-torrent:1.1.1 deploy/qbittorrent
 
 echo -e "    - Building ${BOLD}gamecube-proxy:1.1.1${NC} (Nginx SSL Reverse Proxy)..."
-podman build -t localhost/gamecube-proxy:1.1.1 deploy/nginx
+user_cmd podman build -t localhost/gamecube-proxy:1.1.1 deploy/nginx
 
 echo -e "    ${GREEN}✔${NC} All container images built successfully."
 
@@ -325,12 +367,13 @@ WantedBy=default.target
 EOF
 
 echo -e "    ${GREEN}✔${NC} Quadlets installed to: ${CYAN}${QUADLET_DIR}${NC}"
+chown -R "${CURRENT_USER}:${CURRENT_USER}" "${USER_HOME}/.config/containers" 2>/dev/null || true
 
 # 7. Reload and Start Service
 echo -e "\n${BLUE}==>${NC} ${BOLD}7. Starting GameCube-Manager service...${NC}"
-systemctl --user daemon-reload
-systemctl --user restart gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service || \
-systemctl --user start gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
+user_systemctl daemon-reload
+user_systemctl restart gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service || \
+user_systemctl start gamecube-pod.service gamecube-web.service gamecube-torrent.service gamecube-proxy.service
 
 # 8. Health Verification
 echo -e "    Waiting for services to initialize..."
