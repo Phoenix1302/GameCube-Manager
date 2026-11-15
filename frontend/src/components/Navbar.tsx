@@ -154,9 +154,17 @@ export const Navbar: React.FC = () => {
             </div>
           )}
 
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1 flex items-center gap-1.5">
-            {isAdmin ? <Shield className="w-3.5 h-3.5 text-steam-cyan" /> : <Gamepad className="w-3.5 h-3.5 text-steam-accent" />}
-            {isAdmin ? 'Панель администратора' : 'Игровой портал'}
+          {/* Section Divider & Label */}
+          <div className="flex items-center gap-2.5 pt-1.5 pb-0.5 px-2 select-none pointer-events-none cursor-default">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400/90 uppercase tracking-widest">
+              {isAdmin ? (
+                <Shield className="w-3 h-3 text-slate-500 flex-shrink-0" />
+              ) : (
+                <Gamepad className="w-3 h-3 text-slate-500 flex-shrink-0" />
+              )}
+              <span>{isAdmin ? 'Панель администратора' : 'Игровой портал'}</span>
+            </span>
+            <div className="flex-1 h-px bg-steam-border/70" />
           </div>
           <div className="space-y-1">
             {currentNavItems.map((item) => {
